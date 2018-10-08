@@ -1,11 +1,13 @@
+# -*- coding: utf-8 -*-
 
-__all__ = ['read', 'read_cfgrib']
+__all__ = ['read_eccodes', 'read_cfgrib']
 
 
 def read_cfgrib(filename, **kwargs):
     import xarray
     try:
         import cfgrib
+
     except ImportError:
         print("requires eccodes library, and xarray")
         raise ImportError()
@@ -13,7 +15,7 @@ def read_cfgrib(filename, **kwargs):
     return cfgrib.open_dataset(filename, **kwargs)
 
 
-def read(filename, keys=None, verbose=0):
+def read_eccodes(filename, keys=None, **kwargs):
     """ Read a GRIB file into DataArray class
 
     Expects: var x date x level x lat x lon
@@ -21,7 +23,6 @@ def read(filename, keys=None, verbose=0):
     Args:
         filename (str):
         keys (dict):
-        verbose (int):
 
     Returns:
 
@@ -32,6 +33,7 @@ def read(filename, keys=None, verbose=0):
     import xarray as xr
     try:
         import eccodes
+
     except ImportError:
         print("This function requires eccodes from ECMWF installed")
         print("eccodes requires python 2, for python 3 use cfgrib")
@@ -76,7 +78,7 @@ def read(filename, keys=None, verbose=0):
                     data[ivar][idate] = {}
 
                 data[ivar][idate][ilevel] = values.reshape(nj, ni)  # how to figure out which comes first ?
-                message("%s [%s] [%s]" % (ivar, idate, str(ilevel)), name='GRIB', verbose=verbose)
+                message("%s [%s] [%s]" % (ivar, idate, str(ilevel)), mname='GRIB', **kwargs)
     except:
         raise
 
@@ -100,12 +102,10 @@ def read(filename, keys=None, verbose=0):
         for idate in dates:
             tmp += [np.stack(data[ivar][idate].values())]
 
-        message("DataArray ", ivar, name='GRIB', verbose=verbose)
-        data[ivar] = xr.DataArray(ivar, np.array(tmp), order, dims, attrs=attrs[ivar],
-                               dim_attrs=dim_attrs,
-                               axes=['T', 'Z', 'Y', 'X'], verbose=0)
+        message("DataArray ", ivar, mname='GRIB', **kwargs)
+        data[ivar] = xr.DataArray(ivar, np.array(tmp), order, dims, attrs=attrs[ivar], dim_attrs=dim_attrs, axes=['T', 'Z', 'Y', 'X'])
         data[ivar].sort(verbose=0)  # funktioniert das?
 
-    message("--- %s seconds ---" % (time() - start_time), verbose=verbose, name='GRIB')
+    message("--- %s seconds ---" % (time() - start_time), mname='GRIB', **kwargs)
     # missing global attributes and history
     return data  # needs to be an xarray

@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
-__all__ = ['nanrange', 'nancount', 'fuzzy_equal', 'fuzzy_all', 'distance']
+__all__ = ['vrange', 'nanrange', 'nancount', 'fuzzy_equal', 'fuzzy_all', 'distance']
+
+
+def vrange(x, axis=0):
+    return np.min(x, axis=axis), np.max(x, axis=axis)
 
 
 def nanrange(x, axis=0):

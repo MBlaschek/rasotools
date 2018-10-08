@@ -1,30 +1,12 @@
 # -*- coding: utf-8 -*-
-import os
-from time import time
-
-import numpy as np
 import pandas as pd
-import xarray as xr
-
-from .fun import message
 
 
-__all__ = ['open_igrav2', 'open_mars_odb', 'read_radiosondelist']
-
-
-def open_mars_odb(filename):
-    # read data
-    # split into 2d data (t, rh, ... x p) and 1d data arrays (lon, lat, sonde type)
-    # return Dataset
-    pass
-
-
-def open_igrav2(filename):
-    pass
+__all__ = ['read_radiosondelist']
 
 
 def read_radiosondelist(filename=None, minimal=True, with_igra=False):
-    from . import get_data
+    from .. import get_data
 
     if filename is None:
         filename = get_data('radiosondeslist.csv')
@@ -46,7 +28,7 @@ def read_radiosondelist(filename=None, minimal=True, with_igra=False):
 
 
 def wmo2igra(ident):
-    from . import get_data
+    from .. import get_data
     ident = str(ident)  # make sure
     igra2wmo = pd.read_json(get_data('igra2wmo.json'), dtype=False)  # sa strings
     if igra2wmo.wmo.str.contains(ident).any():
@@ -55,7 +37,7 @@ def wmo2igra(ident):
 
 
 def igra2wmo(ident):
-    from . import get_data
+    from .. import get_data
     ident = str(ident)  # make sure
     igra2wmo = pd.read_json(get_data('igra2wmo.json'), dtype=False)  # sa strings
     if igra2wmo.index.str.contains(ident).any():

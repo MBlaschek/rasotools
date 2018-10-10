@@ -44,7 +44,7 @@ def find_files(directory, pattern, recursive=True):
     return matches
 
 
-def message(*args, **kwargs):
+def message(*args, mname=None, verbose=0, level=0, logfile=None, **kwargs):
     """
 
     Parameters
@@ -64,18 +64,15 @@ def message(*args, **kwargs):
     -------
 
     """
-    level = kwargs.get('level', 0)
-    logfile = kwargs.get('logfile', None)
-
     if logfile is not None:
         # with open(kwargs['filename'], 'a' if not kwargs.get('force', False) else 'w') as f:
-        with open(kwargs['logfile'], 'a') as f:
+        with open(logfile, 'a') as f:
             f.write(_print_string(*args, **kwargs) + "\n")
 
-    elif kwargs.get('verbose', 0) > level:
+    elif verbose > level:
         text = _print_string(*args, **kwargs)
-        if kwargs.get('mname') is not None:
-            text = "[%s] " % kwargs.get('mname') + text
+        if mname is not None:
+            text = "[%s] " % mname + text
 
         print(text)
     else:

@@ -21,6 +21,7 @@ from . import io
 from . import grid
 from . import fun
 from . import bp
+from . import plot
 
 
 def _getlibs():

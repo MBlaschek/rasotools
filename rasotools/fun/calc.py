@@ -46,7 +46,7 @@ def fuzzy_equal(x, y, z):
     return (y < (x + z)) & (y > (x - z))
 
 
-def distance(lon, lat, ilon, ilat):
+def distance(lon, lat, ilon, ilat, miles=False):
     """
     Calculates the distance between a point and an array of points
     Distance in kilometers
@@ -79,5 +79,8 @@ def distance(lon, lat, ilon, ilat):
     # vector + vector * value * vector
     a = np.sin(dlat / 2) ** 2 + np.cos(lat) * np.cos(ilat) * np.sin(dlon / 2) ** 2
     c = 2 * np.arcsin(np.sqrt(a))
-    r = 6371  # Radius of earth in kilometers. Use 3956 for miles
+    if miles:
+        r = 3956  # Radius of the earth in miles.
+    else:
+        r = 6371  # Radius of earth in kilometers.
     return c * r

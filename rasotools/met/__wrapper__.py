@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
+import numpy as np
+from xarray import DataArray
+from .esat import svp
+from .humidity import sh2vap, dewpoint, vap2sh
+from .tpw import tpw
+from ..fun import message
 
 __all__ = ['to_rh']
 
 
-def to_rh(temp, dpd=None, spec_humi=None, press=None, method='HylandWexler', attributes=None, **kwargs):
+def to_rh(temp, dpd=None, spec_humi=None, press=None, method='HylandWexler', **kwargs):
     """
     Convert dewpoint departure or specific humidity to relative humidity
 
@@ -15,94 +21,66 @@ def to_rh(temp, dpd=None, spec_humi=None, press=None, method='HylandWexler', att
         + Q to VP, T to VPsat
         + VP / VPsat
 
-    Args:
-        temp: temperature
-        dpd: dewpoint
-        spec_humi: specific humidiy
-        press: air pressure
-        method:
-        attributes:
+    Parameters
+    ----------
+    temp: xr.DataArray
+        temperature
+    dpd: xr.DataArray
+        dewpoint
+    spec_humi: xr.DataArray
+        specific humidiy
+    press: xr.DataArray, str
+        air pressure, dimension name of pressure var
+    method: str
+        Saturation water vapor pressure formulation
 
-    Returns:
-        DataArray : relative humidity [1]
+    Returns
+    -------
+    xr.DataArray :
+        relative humidity [1]
     """
-    from ..fun import message
-
-    funcid = "[RH] "
-    from xData import DataArray
-    from .esat import svp
-    from .humidity import sh2vap
-
     if not isinstance(temp, DataArray):
-        raise ValueError(funcid + "Requires a DataArray class Object")
+        raise ValueError("Requires a DataArray class Object")
 
     if dpd is None and spec_humi is None:
-        raise RuntimeError(funcid + "Requires either dpd or q for conversion")
+        raise RuntimeError("Requires either dpd or q for conversion")
 
     if dpd is not None and not isinstance(dpd, DataArray):
-        raise ValueError(funcid + "Requires a DataArray class Object")
+        raise ValueError("Requires a DataArray class Object")
 
     if spec_humi is not None:
         if not isinstance(spec_humi, DataArray):
-            raise ValueError(funcid + "Requires a DataArray class Object")
+            raise ValueError("Requires a DataArray class Object")
 
-        if press is None and spec_humi.get_dimension_by_axis('Z') is None:
-            raise RuntimeError(funcid + "Conversion requires a pressure variable as well")
-
-    # DATA
-    rvar = temp.copy()
-    for iatt in list(rvar.attrs.keys()):
-        del rvar.attrs[iatt]
-
-    if kwargs.get('p', None) is not None:
-        if kwargs['p'] == 'press':
-            if press is None:
-                press = rvar.dims[rvar.get_dimension_by_axis('Z')].values  # get pressure values
-                press = _conform(press, rvar.values.shape)
-            elif isinstance(press, DataArray):
-                kwargs['p'] = press.values
-            else:
-                kwargs['p'] = press
-
-    if dpd is not None:
-        # DPD to RH
-        vpdata = svp(temp.values - dpd.values, method=method, **kwargs)
-        rvar.values = vpdata / svp(temp.values, method=method, **kwargs)
-        origin = 'DPD'
-    else:
         if press is None:
-            press = spec_humi.dims[spec_humi.get_dimension_by_axis('Z')].values  # get pressure values
-            press = _conform(press, spec_humi.values.shape)
+            raise RuntimeError("Conversion requires a pressure variable as well")
 
+    rvar = temp.copy()
+    if press is not None:
+        if isinstance(press, str):
+            if press in rvar.dims:
+                press = rvar[press].values
+                press = _conform(press, rvar.values.shape)
         elif isinstance(press, DataArray):
-            press = press.values  # Assume Pa ?
-
+            press = press.values
         else:
             pass
 
-        # Q to RH
-        # if 'FOEEWMO' in method:
-        #     rvar.values = sh2rh_ECMWF(spec_humi.values, temp.values, press)
-        #
-        # else:
-        if kwargs.get('p', None) is not None:
-            if kwargs['p'] == 'press':
-                kwargs['p'] = press
+    if dpd is not None:
+        # DPD to RH
+        vpdata = svp(temp.values - dpd.values, method=method, p=press)
+        rvar.values = vpdata / svp(temp.values, method=method, p=press)
+        origin = 'DPD'
+    else:
         vpdata = sh2vap(spec_humi.values, press)
-        rvar.values = vpdata / svp(temp.values, method=method, **kwargs)
+        rvar.values = vpdata / svp(temp.values, method=method, p=press)
         origin = 'Q'
-
-    if attributes is not None:
-        for ikey, ival in attributes.items():
-            rvar.attrs[ikey] = ival
 
     r_att = {'units': '1', 'standard_name': 'relativ_humidity', 'esat': method, 'origin': origin}
     if 'p' in kwargs.keys():
         kwargs['p'] = 'enhancement_factor'
-    r_att.update(kwargs)
-    for ikey, ival in r_att.items():
-        rvar.attrs[ikey] = ival
 
+    rvar.attrs.update(r_att)
     return rvar
 
 
@@ -126,9 +104,6 @@ def to_vp(temp, dpd=None, rel_humi=None, spec_humi=None, press=None, method='Hyl
     data
     """
     funcid = "[VP] "
-    from xData import DataArray
-    from .humidity import sh2vap
-    from .esat import svp
 
     if not isinstance(temp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class")
@@ -224,9 +199,6 @@ def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, method='Hyl
         dpd: dewpoint depression
     """
     funcid = "[DPD] "
-    from xData import DataArray
-    from .humidity import sh2vap, dewpoint
-    from .esat import svp
 
     if not isinstance(temp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class")
@@ -315,9 +287,7 @@ def to_sh(vp=None, temp=None, rel_humi=None, dpd=None, press=None, method='Hylan
         spec_humi: specific humidity
     """
     funcid = "[SH] "
-    from xData import DataArray
-    from .humidity import vap2sh
-    from .esat import svp
+
 
     if not isinstance(temp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class")
@@ -385,7 +355,7 @@ def to_sh(vp=None, temp=None, rel_humi=None, dpd=None, press=None, method='Hylan
     return qvar
 
 
-def dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, method='HylandWexler', **kwargs):
+def to_dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, method='HylandWexler', **kwargs):
     """ calculate dewpoint
     VP -> Td
     T, RH (p= -> vp -> Td
@@ -395,9 +365,6 @@ def dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, meth
         dewp: dewpoint
     """
     funcid = "[Td]"
-    from xData import DataArray
-    from .humidity import sh2vap, dewpoint
-    from .esat import svp
     if not isinstance(vp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class")
 
@@ -481,9 +448,6 @@ def saturation_water_vapor(temp, method='HylandWexler', **kwargs):
     Returns:
         svp: satuartion water vapor pressure [Pa]
     """
-    from xData import DataArray
-    from .esat import svp
-
     funcid = "[ES] "
     if not isinstance(temp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class Object")
@@ -531,12 +495,6 @@ def total_precipitable_water(data, levels=None, min_levels=8, fill_nan=True, met
             W = np.sum( q * dp ) / 9.81   requires dp calculation dpres (NCL)
         The integral is with rho_water (assumed 1000) and neglected for conversion of m to mm
     """
-    import numpy as np
-    from xData import DataArray
-    from .tpw import tpw
-    from .esat import svp
-    from .humidity import vap2sh
-
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
 
@@ -604,28 +562,29 @@ def total_precipitable_water(data, levels=None, min_levels=8, fill_nan=True, met
 
 def vertical_interpolation(data, dim, levels=None, min_levels=3, **kwargs):
     import numpy as np
-    from .stats import interp_profile
+    from ..fun.interp import interp_profile
     from .. import config
-    from xData import DataArray
 
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
 
-    data = data.copy()
+    if dim not in data.dims:
+        raise ValueError("Requires a valid dimension", dim, "of",data.dims)
 
     if levels is None:
         levels = config.std_plevels
 
-    lev = data.get_dimension_by_axis('Z')
-    if lev is None:
-        raise RuntimeError('Requires a vertical coordinate')
-
-    axis = data.order.index(lev)
+    coords = dict(data.coords)
+    axis = data.dims.index(dim)
     pin = data.dims[dim].values
-    data.values = np.apply_along_axis(interp_profile, axis, data.values, pin, levels, min_levels=min_levels)
-    # update dimension
-    data.dims[dim].values = levels
-    # Meta info ?
+    values = np.apply_along_axis(interp_profile, axis, data.values, pin, levels, min_levels=min_levels)
+    coords[dim] = (dim, levels, data[dim].attrs)   # modify dimension
+    data = DataArray(name=data.name, data=values, coords=coords, dims=data.dims, attrs=data.attrs)
+    cmethod = "%s: intp(%d > %d)" % (dim, len(pin), len(levels))
+    if 'cell_method' in data.attrs:
+        data.attrs['cell_method'] = cmethod + data.attrs['cell_method']
+    else:
+        data.attrs['cell_method'] = cmethod
     return data
 
 
@@ -646,9 +605,6 @@ def adjust_dpd30(data, num_years=10, subset=slice(None, '1994'), value=30, bins=
     -------
     copy of DataArray
     """
-    import numpy as np
-    from xData import DataArray
-    from xData.fun import date_selection
     from .manual import remove_spurious_values
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
@@ -663,7 +619,7 @@ def adjust_dpd30(data, num_years=10, subset=slice(None, '1994'), value=30, bins=
 
     if bins is None:
         bins = np.arange(0, 60)
-        _message("Using default bins [0, 60]", name='D30', **kwargs)
+        message("Using default bins [0, 60]", name='D30', **kwargs)
 
     axis = data.order.index(date_dim)
     dates = data.dims[date_dim].values.copy()
@@ -673,7 +629,7 @@ def adjust_dpd30(data, num_years=10, subset=slice(None, '1994'), value=30, bins=
         dindex = date_selection(dates, subset)
         itx[axis] = dindex
         dates = dates[dindex]
-        _message("Using Subset %s" % str(subset), name='D30', **kwargs)
+        message("Using Subset %s" % str(subset), name='D30', **kwargs)
 
     values = data.values[itx]
 

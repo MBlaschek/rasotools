@@ -2,21 +2,24 @@
 
 import numpy as np
 import xarray as xr
+from ..fun import message
 
 __all__ = ['extract_locations']
 
 
-def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None, debug=False, verbose=0):
+def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None, debug=False, **kwargs):
     """ Extract location(s) from DataArray
 
     Args:
-        data (DataArray) :
-        lon (float, int, list):
-        lat (float, int, list):
-        method (str):
-        raw (bool):
-        debug (bool):
-        verbose (int):
+        data : xr.DataArray
+        lon : float, int, list
+        lat : float, int, list
+        method : str
+            Interpolation Method: point, bilinear, distance
+        raw : bool
+        conat : str, list, Index
+            concat along this new dimension
+        debug : bool
 
     Returns:
         list or DataArray
@@ -45,12 +48,13 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
     xlons = data[name_lon].values
     if (xlons < 0).any():
         data[name_lon].values = np.where(xlons < 0, xlons + 360., xlons)
-        print("Adjusting GRID Longitudes ...")
+        message("Adjusting GRID Longitudes ...", mname='EXT', **kwargs)
 
-    # Input needs to be on the sam lon
+    # Input needs to be on the same lon
     if (lon < 0).any():
         lon = np.where(lon < 0, lon + 360., lon)
-        print("Adjusting INPUT Longitudes ...")
+        message("Adjusting INPUT Longitudes ...", mname='EXT', **kwargs)
+
 
     order = data.dims  # tuple
     ilon = order.index(name_lon)
@@ -63,11 +67,6 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
     iorder = [i for i in order if i not in [name_lat, name_lon]]
     dattrs = dict(data.attrs)
     newcoords = {i: data[i].copy() for i in iorder}
-
-    if method == 'points':
-        npoints = 1
-    else:
-        npoints = 4
 
     for jlon, jlat in zip(lon, lat):
         try:
@@ -113,7 +112,7 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
 
             # results
             if not raw:
-                dattrs['extract'] = method
+                dattrs['cell_method'] = "%s,%s: intp(%s)" % (name_lon, name_lat, method)
                 newcoords[name_lon] = jlon - 360. if jlon > 180 else jlon
                 newcoords[name_lat] = jlat
                 tmp = xr.DataArray(tmp, coords=newcoords, dims=iorder, name=data.name, attrs=dattrs)
@@ -130,10 +129,7 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
         return locations[0]
 
     if concat is not None:
-        if isinstance(concat, str):
-            locations = xr.concat(locations, concat)
-        else:
-            locations = xr.concat(locations, concat)
+        locations = xr.concat(locations, dim=concat)
 
     return locations
 

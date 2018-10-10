@@ -189,7 +189,7 @@ class Radiosonde(object):
         pass
 
     def to_netcdf(self, name, filename=None, directory=None, xargs={}, **kwargs):
-        """ Write data to NetCDF 4
+        """ Write each data variable to NetCDF 4
 
         Parameters
         ----------
@@ -199,7 +199,8 @@ class Radiosonde(object):
             filename
         directory : str
             directory to write to, default: rasodir in config
-
+        xargs : dict
+            keywords as dict to Xarray function
         Returns
         -------
 

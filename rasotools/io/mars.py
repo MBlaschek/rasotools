@@ -49,6 +49,21 @@ def open_mars_odb(ident, variables=None, filename=None, directory=None, force_re
 
 
 def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwargs):
+    """ Convert MARS ODB to xArray
+
+    Parameters
+    ----------
+    ident
+    filename
+    save
+    levels
+    force
+    kwargs
+
+    Returns
+    -------
+
+    """
     from .. import config
     from ..fun import interp_dataframe
 
@@ -77,7 +92,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         numlev = data.groupby(data.index).nunique().max(axis=1)   # number of levels
         data = interp_dataframe(data, 'pres', levels=levels, **kwargs)
 
-        # Add Metadata
+        # convert from Table to Array and add Metadata
         new = {}
         for ivar in data.columns.tolist():
             if ivar == 'pres':
@@ -101,6 +116,8 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         data.attrs.update({'ident': ident, 'source': 'ECMWF', 'info': 'MARS ODB', 'dataset': 'ERA-INTERIM',
                            'levels': 'ERA-I 32 lower', 'processed': 'UNIVIE, IMG', 'libs': config.libinfo})
 
+        if not station.index.is_unique:
+            station = station.reset_index().drop_duplicates(['date','lon','lat','alt']).set_index('date')
         station = station.reindex(np.unique(data.date.values))  # same dates as data
         station = station.fillna(method='ffill')  # fill Missing information with last known
         station['numlev'] = numlev

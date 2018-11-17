@@ -68,16 +68,11 @@ def distance(lon, lat, ilon, ilat, miles=False):
     http://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
     """
     rad_factor = np.pi / 180.0  # for trignometry, need angles in radians
-    # implicit copyies !
-    lat *= rad_factor
-    lon *= rad_factor
-    ilat *= rad_factor
-    ilon *= rad_factor
-    #
-    dlon = lon - ilon
-    dlat = lat - ilat
+    mlat, mlon, jlat, jlon = lat*rad_factor, lon*rad_factor, ilat*rad_factor, ilon*rad_factor
+    dlon = mlon - jlon
+    dlat = mlat - jlat
     # vector + vector * value * vector
-    a = np.sin(dlat / 2) ** 2 + np.cos(lat) * np.cos(ilat) * np.sin(dlon / 2) ** 2
+    a = np.sin(dlat / 2) ** 2 + np.cos(mlat) * np.cos(jlat) * np.sin(dlon / 2) ** 2
     c = 2 * np.arcsin(np.sqrt(a))
     if miles:
         r = 3956  # Radius of the earth in miles.

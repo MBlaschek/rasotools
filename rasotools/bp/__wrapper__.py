@@ -13,6 +13,7 @@ def combine_breakpoints():
     # use snht break points
     # use sonde type changes
     # use documentation changes
+    # use radiosonde intercomparison data to adjust radiosonde types?
     # how to weight these changes
     # probability of a breakpoint ?
     pass

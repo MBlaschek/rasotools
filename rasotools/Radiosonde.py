@@ -109,16 +109,20 @@ class Radiosonde(object):
         if not isinstance(name, list):
             name = [name]
 
+        if 'rasodir' in config and directory is None:
+            if os.path.isdir(config.rasodir):
+                directory = config.rasodir
+
         if filename is not None:
             if '.nc' not in filename:
                 print("Warning can read only NetCDF / Xarray open_dataset formats")
 
-        if 'rasodir' in config:
-            if os.path.isdir(config.rasodir):
-                directory = config.rasodir
-
-        if directory is not None:
-            self.aux['directory'] = directory
+            if not os.path.isfile(filename):
+                if directory is not None:
+                    if not os.path.isfile(directory + '/' + filename):
+                        filename = directory + '/' + str(self.ident) + '/' + filename
+                    else:
+                        filename = directory + '/' + filename
 
         if variable is not None:
             if not isinstance(variable, list):
@@ -126,10 +130,13 @@ class Radiosonde(object):
 
         for iname in name:
             if filename is None:
-                if self.ident is not None:
+                if os.path.isfile(directory + '/' + str(self.ident) + '/' + iname + '.nc'):
                     ifilename = directory + '/' + str(self.ident) + '/' + iname + '.nc'
-                else:
+                elif os.path.isfile(directory + '/' + iname + '.nc'):
                     ifilename = directory + '/' + iname + '.nc'
+                else:
+                    message("Not found:", iname, directory)
+                    continue
 
             else:
                 ifilename = filename
@@ -188,7 +195,7 @@ class Radiosonde(object):
         # check what data are int eh raso_archive
         pass
 
-    def to_netcdf(self, name, filename=None, directory=None, xargs={}, **kwargs):
+    def to_netcdf(self, name, filename=None, directory=None, force=False, xargs={}, **kwargs):
         """ Write each data variable to NetCDF 4
 
         Parameters
@@ -199,6 +206,8 @@ class Radiosonde(object):
             filename
         directory : str
             directory to write to, default: rasodir in config
+        force : bool
+            force new file
         xargs : dict
             keywords as dict to Xarray function
         Returns
@@ -210,13 +219,9 @@ class Radiosonde(object):
         if not isinstance(name, list):
             name = [name]
 
-        if 'directory' in self.aux:
-            directory = getattr(self.aux, 'directory', '.')
-            message("Using", directory, mname='NC', **kwargs)
-
         if 'rasodir' in config:
             if os.path.isdir(config.rasodir):
-                directory = config.rasodir
+                directory = config.rasodir + '/' + str(self.ident) + '/'
                 message("Using", directory, mname='NC', **kwargs)
 
         attrs = vars(self.attrs)
@@ -227,6 +232,11 @@ class Radiosonde(object):
                     ifilename = directory + '/' + iname + '.nc'
                 else:
                     ifilename = filename
+
+                if force:
+                    os.remove(ifilename)
+                    force = False
+
                 message("Writing", ifilename, mname='NC', level=1, **kwargs)
                 iobj = getattr(self.data, iname)
                 iobj.attrs.update(attrs)  # add attributes

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import numpy as np
 import pandas as pd
 
 
@@ -43,3 +44,18 @@ def igra2wmo(ident):
     if igra2wmo.index.str.contains(ident).any():
         return igra2wmo[igra2wmo.index.str.contains(ident)].wmo.tolist()[0]
     return None
+
+
+def dist_array(data, lon='lon', lat='lat'):
+    from ..fun import distance
+    if not isinstance(data, pd.DataFrame):
+        raise ValueError('Requires a DataFrame with lon, lat columns and index WMO')
+
+    matrix = []
+
+    for irow in data.shape[0]:
+        matrix += [distance(data[lon], data[lat], data[irow, lon], data[irow, lat])]
+
+    matrix = pd.DataFrame(np.array(matrix), index=data.index, columns=data.index)
+
+    return matrix

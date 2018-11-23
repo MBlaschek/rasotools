@@ -141,7 +141,7 @@ class Radiosonde(object):
             else:
                 ifilename = filename
 
-            message("Reading ...",ifilename, mname='ADD', **kwargs)
+            message("Reading ...",ifilename, **kwargs)
             ds = xr.open_dataset(ifilename, **xwargs)
 
             if variable is not None:
@@ -170,7 +170,7 @@ class Radiosonde(object):
                 ds = xr.open_dataset(ifilename, **kwargs)
 
             if ds is not None:
-                message(iname, mname='ADD', level=1, **kwargs)
+                message(iname, level=1, **kwargs)
                 setattr(self.data, iname, ds)
 
         if self.ident == 'Unknown':
@@ -180,12 +180,12 @@ class Radiosonde(object):
         for idata in self.data:
             if idata not in exclude:
                 del self.data[idata]
-                message(idata, mname='CLEAR', **kwargs)
+                message(idata, **kwargs)
 
     def rename(self, old_name, new_name, **kwargs):
         if old_name in self.data:
             self.data.__dict__[new_name] = self.data.__dict__.pop(old_name)
-            message(old_name, " > ", new_name, mname='RENAME', **kwargs)
+            message(old_name, " > ", new_name, **kwargs)
 
     def inquire(self, dataset, dim=None, per='M', get_counts=True, get_times=True):
         from .met.time import count_per_times, count_per
@@ -279,7 +279,7 @@ class Radiosonde(object):
         if 'rasodir' in config:
             if os.path.isdir(config.rasodir):
                 directory = config.rasodir + '/' + str(self.ident) + '/'
-                message("Using", directory, mname='NC', **kwargs)
+                message("Using", directory, **kwargs)
 
         attrs = vars(self.attrs)
 
@@ -296,7 +296,7 @@ class Radiosonde(object):
                 else:
                     xargs['mode'] = 'a'
 
-                message("Writing", ifilename, mname='NC', level=1, **kwargs)
+                message("Writing", ifilename, level=1, **kwargs)
                 iobj = getattr(self.data, iname)
                 iobj.attrs.update(attrs)  # add attributes
                 if hasattr(iobj, 'to_netcdf'):
@@ -334,12 +334,12 @@ class Radiosonde(object):
         if directory is None:
             directory = '.'
 
-        message("Using", directory, mname='PKL', **kwargs)
+        message("Using", directory, **kwargs)
 
         if filename is None:
             filename = directory + '/' + name + '.pkl'
 
-        message("Writing", filename, mname='PKL', **kwargs)
+        message("Writing", filename, **kwargs)
         with open(filename, 'wb') as f:
             pickle.dump(self, f)   # Pickle everything
 
@@ -401,7 +401,7 @@ def load_radiosonde(name=None, filename=None, directory=None, **kwargs):
         if directory is None:
             filename = directory + '/' + name + '.pkl'
 
-    message("Reading", filename, mname='PKL', **kwargs)
+    message("Reading", filename, **kwargs)
     with open(filename, 'rb') as f:
         out = pickle.load(f)
     return out

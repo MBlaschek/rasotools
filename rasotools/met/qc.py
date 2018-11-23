@@ -14,7 +14,7 @@ def temperature(data, pressure, axis=1, return_logic=False, **kwargs):
         raise ValueError("requires a numpy array")
 
     if not np.all((np.sort(pressure) == pressure)):
-        message("Pressure levels not sorted, applying to data", mname='TEMP', **kwargs)
+        message("Pressure levels not sorted, applying to data", **kwargs)
 
     index = [np.newaxis if (iname != pressure) else slice(None, None) for iname, idim in data.dims.items()]
     tmins = np.interp(np.log(pin), np.log(rt.p.values), rt.tmin.values, left=rt.tmin.min(), right=rt.tmin.max())

@@ -628,13 +628,13 @@ def adjust_dpd30(data, num_years=10, datedim='date', subset=slice(None, '1994'),
 
     if bins is None:
         bins = np.arange(0, 60)
-        message("Using default bins [0, 60]", mname='D30', **kwargs)
+        message("Using default bins [0, 60]", **kwargs)
 
     axis = data.dims.index(datedim)
     dates = data[datedim].values.copy()
     itx = [slice(None)] * len(data.dims)
     itx[axis] = subset
-    message("Using Subset %s" % str(subset), mname='D30', **kwargs)
+    message("Using Subset %s" % str(subset), **kwargs)
     values = data.loc[itx].values
 
     if np.sum(np.isfinite(values)) == 0:

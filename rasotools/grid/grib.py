@@ -78,7 +78,7 @@ def read_eccodes(filename, keys=None, **kwargs):
                     data[ivar][idate] = {}
 
                 data[ivar][idate][ilevel] = values.reshape(nj, ni)  # how to figure out which comes first ?
-                message("%s [%s] [%s]" % (ivar, idate, str(ilevel)), mname='GRIB', **kwargs)
+                message("%s [%s] [%s]" % (ivar, idate, str(ilevel)), **kwargs)
     except:
         raise
 
@@ -102,10 +102,10 @@ def read_eccodes(filename, keys=None, **kwargs):
         for idate in dates:
             tmp += [np.stack(data[ivar][idate].values())]
 
-        message("DataArray ", ivar, mname='GRIB', **kwargs)
+        message("DataArray ", ivar, **kwargs)
         data[ivar] = xr.DataArray(ivar, np.array(tmp), order, dims, attrs=attrs[ivar], dim_attrs=dim_attrs, axes=['T', 'Z', 'Y', 'X'])
         data[ivar].sort(verbose=0)  # funktioniert das?
 
-    message("--- %s seconds ---" % (time() - start_time), mname='GRIB', **kwargs)
+    message("--- %s seconds ---" % (time() - start_time), **kwargs)
     # missing global attributes and history
     return data  # needs to be an xarray

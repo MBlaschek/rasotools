@@ -537,6 +537,62 @@ def standard_sounding_times(data, dim='date', times=[0, 12], span=12, freq='12h'
     return new, timeinfo
 
 
+def split_by_time(data, dim='date', standardize=True, times=(0, 12), **kwargs):
+    """ Split Array into separate Arrays by time
+
+    Args:
+        data:
+        dim:
+        standardize:
+        times:
+        **kwargs:
+
+    Returns:
+
+    """
+    from xarray import DataArray, Dataset
+
+    if not isinstance(data, DataArray):
+        raise ValueError("Requires a DataArray class object (data)")
+
+    data = data.copy()
+
+    if standardize:
+        data, _ = standard_sounding_times(data, dim=dim, times=times, **kwargs)
+    else:
+        data = data.sel(**{dim: data[dim].dt.hour.isin(times)})  # selection
+
+    data = dict(data.groupby(dim + '.hour'))
+    for ikey in data.keys():
+        idata = data.pop(ikey)
+        idata[dim].values = idata[dim].to_index().to_period('D').to_timestamp().values
+        data[ikey] = idata
+    return Dataset(data)
+
+
+def combine_by_time(data, dim='date', variables=None, times=None, name=None, **kwargs):
+    import pandas as pd
+    from xarray import Dataset, concat
+    if not isinstance(data, Dataset):
+        raise ValueError('Requires a Dataset with different times')
+
+    if variables is None:
+        variables = list(data.data_vars)
+    if times is None:
+        times = [ int(i) for i in list(data.data_vars)]
+    variables = dict(zip(variables, times))
+    print(variables)
+
+    tmp = {}
+    for ivar, ihour in variables.items():
+        if dim in data[ivar].dims:
+            tmp[ivar] = data[ivar]
+            tmp[ivar][dim].values = (tmp[ivar][dim].to_index() + pd.DateOffset(hours=ihour)).values
+    tmp = concat(tmp.values(), dim=dim)
+    tmp.name = name
+    return tmp
+
+
 def day_night_departures(data, dim='date', standardize=True, **kwargs):
     """ Day-Night departures form data
 

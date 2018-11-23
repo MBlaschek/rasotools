@@ -54,12 +54,12 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
     xlons = data[name_lon].values
     if (xlons < 0).any():
         data[name_lon].values = np.where(xlons < 0, xlons + 360., xlons)
-        message("Adjusting GRID Longitudes ...", mname='EXT', **kwargs)
+        message("Adjusting GRID Longitudes ...", **kwargs)
 
     # Input needs to be on the same lon
     if (lon < 0).any():
         lon = np.where(lon < 0, lon + 360., lon)
-        message("Adjusting INPUT Longitudes ...", mname='EXT', **kwargs)
+        message("Adjusting INPUT Longitudes ...", **kwargs)
 
 
     order = data.dims  # tuple

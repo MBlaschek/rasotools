@@ -53,7 +53,7 @@ def dataframe(data, level_column, levels=None, variables=None, min_levels=3, kee
     data = data.reset_index().drop('level_1', axis=1).sort_values(by=['date', level_column]).set_index('date',
                                                                                                        drop=True)
     m = data.shape
-    message(n, ' >> ', m, mname='INTP DB', **kwargs)
+    message(n, ' >> ', m, **kwargs)
     return data
 
 

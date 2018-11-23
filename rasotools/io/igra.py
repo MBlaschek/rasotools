@@ -44,7 +44,7 @@ def open_igra(ident, variables=None, filename=None, directory=None, force_read_a
 
     if filename is None:
         filename = directory + '/%s/IGRAv2.nc' % ident
-        message(filename, mname='OMO', **kwargs)
+        message(filename, **kwargs)
 
     data = to_xarray(ident, filename=filename, levels=levels, force=force_read_ascii, **kwargs)
     if variables is not None:
@@ -89,14 +89,14 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         if not np.isin(levels, config.era_plevels).all():
             interp_new = True
             save = False
-            message("Not all levels in ERA-I levels, interpolating again", levels, mname='INTP', **kwargs)
+            message("Not all levels in ERA-I levels, interpolating again", levels,  **kwargs)
 
     if not interp_new and os.path.isfile(config.rasodir + '/%s/IGRAv2.nc' % ident) and not force:
         # RECOVER ASCII
         data = xr.open_dataset(config.rasodir + '/%s/IGRAv2.nc' % ident)   # DataSet
         save = False  # don't save non ERA-I levels complaint
         if levels is not None:
-            message(ident, levels, mname='SEL', **kwargs)
+            message(ident, levels, **kwargs)
             data = data.sel(pres=levels)
 
     else:
@@ -104,7 +104,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
             levels = config.era_plevels
         # READ ASCII
         data, station = read_ascii(ident, filename=filename, **kwargs)  # DataFrame
-        message(ident, levels, mname='INTP', **kwargs)
+        message(ident, levels, **kwargs)
         data = dataframe(data, 'pres', levels=levels, **kwargs)
 
         # Add Metadata

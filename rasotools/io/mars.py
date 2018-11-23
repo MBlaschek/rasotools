@@ -35,7 +35,7 @@ def open_mars_odb(ident, variables=None, filename=None, directory=None, force_re
 
     if filename is None and not force_read_ascii:
         filename = directory + '/%s/MARS_ODB.nc' % ident
-        message(filename, mname='OMO', **kwargs)
+        message(filename, **kwargs)
 
     data = to_xarray(ident, filename=filename, levels=levels, force=force_read_ascii, **kwargs)
     if variables is not None:
@@ -73,14 +73,14 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         if not np.isin(levels, config.era_plevels).all():
             interp_new = True
             save = False
-            message("Not all levels in ERA-I levels, interpolating again", levels, mname='INTP', **kwargs)
+            message("Not all levels in ERA-I levels, interpolating again", levels, **kwargs)
 
     if not interp_new and os.path.isfile(config.rasodir + '/%s/MARS_ODB.nc' % ident) and not force:
         # RECOVER ASCII
         data = xr.open_dataset(config.rasodir + '/%s/MARS_ODB.nc' % ident)   # DataSet
         save = False  # don't save non ERA-I levels complaint
         if levels is not None:
-            message(ident, levels, mname='SEL', **kwargs)
+            message(ident, levels, **kwargs)
             data = data.sel(pres=levels)
 
     else:
@@ -88,7 +88,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
             levels = config.era_plevels
         # READ ASCII
         data, station = read_ascii(ident, filename=filename, **kwargs)  # DataFrame
-        message(ident, levels, mname='INTP', **kwargs)
+        message(ident, levels, **kwargs)
         numlev = data.groupby(data.index).nunique().max(axis=1)   # number of levels
         data = dataframe(data, 'pres', levels=levels, **kwargs)
 
@@ -164,7 +164,7 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
     colnames = ['date', 'time', 'obstype', 'codetype', 'sondetype', 'ident', 'lat', 'lon', 'alt', 'pres',
                 'varno', 'obsvalue', 'biascorr', 'fg_dep', 'an_dep', 'status', 'anflag', 'event1']
 
-    message(ident,'Reading', filename, mname='MRA', **kwargs)
+    message(ident,'Reading', filename, **kwargs)
 
     tmp = pd.read_csv(filename, sep=' ', error_bad_lines=False, header=None, names=colnames, engine='c',
                       dtype={'date': str, 'time': str}, skipinitialspace=True)
@@ -175,10 +175,10 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
     tmp = tmp.set_index('newdate').drop(['date', 'time'], 1)
     tmp.index.name = 'date'
 
-    message(ident, str(tmp.shape), mname='MRA', **kwargs)
+    message(ident, str(tmp.shape), **kwargs)
 
     if np.size(tmp.ident.unique()) > 1:
-        message("Multiple Idents in file: ", tmp.ident.unique(), mname='MRA', **kwargs)
+        message("Multiple Idents in file: ", tmp.ident.unique(), **kwargs)
         tmp = tmp[tmp.ident == int(ident)]
 
     station = tmp[['lon', 'lat', 'alt', 'sondetype', 'codetype', 'obstype']].drop_duplicates().sort_index()
@@ -198,10 +198,10 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
         qdata.drop_duplicates(inplace=True)
         qdata = qdata.reset_index()
         data = pd.merge(data, qdata, how='outer', on=['date', 'pres'])
-        message(ident, 'Variable:', i, ivar, mname='MRA', **kwargs)
+        message(ident, 'Variable:', i, ivar, **kwargs)
 
     data = data.sort_values(['date', 'pres']).set_index('date')
-    message(ident, 'Dropping duplicates', mname='MRA', **kwargs)
+    message(ident, 'Dropping duplicates', **kwargs)
     data.drop_duplicates(inplace=True)
     # Apply conversion of t, r to DPD
     if 'dewp' in data.columns:

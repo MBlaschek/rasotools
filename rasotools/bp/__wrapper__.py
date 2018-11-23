@@ -1,68 +1,77 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-import xarray as xr
-
+from xarray import Dataset, DataArray
 from ..fun import message
 
 __all__ = ['detect_breakpoints', 'snht', 'adjustments', 'any_breakpoints', 'breakpoint_statistics', 'get_breakpoints']
 
 
-def snht(data, name=None, dep=None, axis=0, window=1460, missing=600, **kwargs):
-    """ Run SNHT on data
+def snht(data, dim='date', var=None, dep=None, window=1460, missing=600, **kwargs):
+    """ Calculate a Standard Normal Homogeinity Test
 
-    Parameters
-    ----------
-    data : xr.DataArray / xr.Dataset
-    name : str
-    dep : str
-    axis : int
-    window : int
-    missing : int
-    kwargs : dict
+    Args:
+        data (DataArray, Dataset):
+        dim (str): datetime dimension
+        var (str): variable if Dataset
+        dep (str, DataArray): departure variable
+        window (int): running window (timesteps)
+        missing (int): allowed missing values in window
+        **kwargs:
 
-    Returns
-    -------
-    xr.Dataset
+    Returns:
+        Dataset : test statistics
     """
     from .det import test
 
-    if not isinstance(data, (xr.DataArray, xr.Dataset)):
+    if not isinstance(data, (DataArray, Dataset)):
         raise ValueError("Require a DataArray / Dataset object")
 
-    if isinstance(data, xr.DataArray):
+    if isinstance(data, DataArray):
         if data.name is None:
-            raise ValueError("DataArray needs a name")
+            raise ValueError("DataArray needs a var")
         idata = data.copy()
     else:
         ivars = list(data.data_vars)
         if len(ivars) == 1:
-            name = ivars[0]
-        elif name is None:
-            raise ValueError("Dataset requires a name")
+            var = ivars[0]
+        elif var is None:
+            raise ValueError("Dataset requires a var")
         else:
             pass
-        idata = data[name].copy()
+        idata = data[var].copy()
+
+    if dim not in idata.dims:
+        raise ValueError('requires a datetime dimension', dim)
+
+    axis = idata.dims.index(dim)
+    attrs = idata.attrs.copy()
 
     if dep is not None:
-        if dep not in data.data_vars:
+        if isinstance(dep, str) and isinstance(data, Dataset):
+            dep = data[dep]
+        elif isinstance(dep, DataArray):
+            dep = dep
+        else:
             raise ValueError("dep var not present")
 
         idata = (idata - dep)
+        attrs['cell_method'] = 'departure ' + dep.name + attrs.get('cell_method', '')
+        idata.attrs.update(attrs)
 
     stest = np.apply_along_axis(test, axis, idata.values, window, missing)
-    params = {'units': '1', 'window': window, 'missing': missing}
+    attrs.update({'units': '1', 'window': window, 'missing': missing})
 
-    if isinstance(data, xr.DataArray):
+    if isinstance(data, DataArray):
         iname = data.name
         data = data.to_dataset()
     else:
-        iname = name
+        iname = var
 
     if dep is not None:
         data[iname + '_dep'] = idata
 
     data[iname + '_snht'] = (list(data.dims), stest)
-    data[iname + '_snht'].attrs.update(params)
+    data[iname + '_snht'].attrs.update(attrs)
     return data
 
 
@@ -181,7 +190,7 @@ def any_breakpoints(data, name=None, axis=0, **kwargs):
         message("\n".join(["[%8s] %s L: %3d" % (j, k, l) for j, k, l in zip(i, d, n)]), **kwargs)
         return True
 
-    message("No breakpoints", mname='AB', **kwargs)
+    message("No breakpoints", **kwargs)
     return False
 
 
@@ -402,7 +411,7 @@ def breakpoint_statistics(data, name, breakname, axis=0, functions=None, borders
 
     nb = len(ibreaks)
     if nb == 0:
-        message("Warning no Breakpoints found", mname='BS', level=0, **kwargs)
+        message("Warning no Breakpoints found", level=0, **kwargs)
         return
 
     date_dim = data[name].dims[axis]

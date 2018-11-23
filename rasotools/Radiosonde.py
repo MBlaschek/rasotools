@@ -291,8 +291,10 @@ class Radiosonde(object):
                     ifilename = filename
 
                 if force:
-                    os.remove(ifilename)
+                    xargs['mode'] = 'w'
                     force = False
+                else:
+                    xargs['mode'] = 'a'
 
                 message("Writing", ifilename, mname='NC', level=1, **kwargs)
                 iobj = getattr(self.data, iname)

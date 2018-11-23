@@ -4,7 +4,8 @@ import numpy as np
 __all__ = ['mean', 'quantile']
 
 
-def mean(data, sample1, sample2, sampleout=None, axis=0, sample_size=130, bounded=None, ratio=True, median=False, **kwargs):
+def mean(data, sample1, sample2, sampleout=None, axis=0, sample_size=130, bounded=None, ratio=True,
+         median=False, **kwargs):
     """ Adjustment method using mean differences or ratios
 
     ratio=False
@@ -257,7 +258,7 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
     adjustment = np.transpose(adjustment, in_dims[:axis] + in_dims[axis + 1:] + [axis])
     adjusts = np.zeros(data.shape)
     # Indices for iteration + expand
-    inds = np.ndindex(data.shape[:-1])   # iterate all dimensions but last
+    inds = np.ndindex(data.shape[:-1])  # iterate all dimensions but last
     inds = (ind + (Ellipsis,) for ind in inds)  # add last as ':' == Ellipsis == all
     for ind in inds:
         # INTERP -> Xnew, Xpoints, Fpoints

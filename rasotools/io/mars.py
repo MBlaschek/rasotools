@@ -65,7 +65,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
 
     """
     from .. import config
-    from ..fun import interp_dataframe
+    from ..fun import dataframe
 
     interp_new = False
 
@@ -90,7 +90,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         data, station = read_ascii(ident, filename=filename, **kwargs)  # DataFrame
         message(ident, levels, mname='INTP', **kwargs)
         numlev = data.groupby(data.index).nunique().max(axis=1)   # number of levels
-        data = interp_dataframe(data, 'pres', levels=levels, **kwargs)
+        data = dataframe(data, 'pres', levels=levels, **kwargs)
 
         # convert from Table to Array and add Metadata
         new = {}

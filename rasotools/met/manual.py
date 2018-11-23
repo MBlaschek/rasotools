@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import pandas as pd
-from ..tools import message, message_level
+from ..fun import message
 
 __all__ = ['remove_spurious_values']
 

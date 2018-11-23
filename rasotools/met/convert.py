@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-import numpy as np
-from xarray import DataArray
-from .esat import svp
-from .humidity import sh2vap, dewpoint, vap2sh
-from .tpw import tpw
-from ..fun import message
 
 __all__ = ['to_rh']
 
@@ -21,24 +15,22 @@ def to_rh(temp, dpd=None, spec_humi=None, press=None, method='HylandWexler', **k
         + Q to VP, T to VPsat
         + VP / VPsat
 
-    Parameters
-    ----------
-    temp: xr.DataArray
-        temperature
-    dpd: xr.DataArray
-        dewpoint
-    spec_humi: xr.DataArray
-        specific humidiy
-    press: xr.DataArray, str
-        air pressure, dimension name of pressure var
-    method: str
-        Saturation water vapor pressure formulation
+    Args:
+        temp (DataArray): temperature
+        dpd (DataArray): dewpoint depression
+        spec_humi (DataArray): specific humidity
+        press (DataArray,str): air pressure or dim name
+        method (str): Saturation water vapor pressure formulation
 
-    Returns
-    -------
-    xr.DataArray :
-        relative humidity [1]
+        **kwargs:
+
+    Returns:
+        DataArray : relative humidity
     """
+    from xarray import DataArray
+    from .esat import svp
+    from .humidity import sh2vap
+
     if not isinstance(temp, DataArray):
         raise ValueError("Requires a DataArray class Object")
 
@@ -103,8 +95,10 @@ def to_vp(temp, dpd=None, rel_humi=None, spec_humi=None, press=None, method='Hyl
     -------
     data
     """
+    from xarray import DataArray
+    from .esat import svp
+    from .humidity import sh2vap
     funcid = "[VP] "
-
     if not isinstance(temp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class")
 
@@ -198,6 +192,9 @@ def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, method='Hyl
     Returns:
         dpd: dewpoint depression
     """
+    from xarray import DataArray
+    from .esat import svp
+    from .humidity import sh2vap, dewpoint
     funcid = "[DPD] "
 
     if not isinstance(temp, DataArray):
@@ -286,8 +283,10 @@ def to_sh(vp=None, temp=None, rel_humi=None, dpd=None, press=None, method='Hylan
     Returns:
         spec_humi: specific humidity
     """
+    from xarray import DataArray
+    from .esat import svp
+    from .humidity import vap2sh
     funcid = "[SH] "
-
 
     if not isinstance(temp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class")
@@ -364,6 +363,9 @@ def to_dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, m
     Returns:
         dewp: dewpoint
     """
+    from xarray import DataArray
+    from .esat import svp
+    from .humidity import sh2vap, dewpoint
     funcid = "[Td]"
     if not isinstance(vp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class")
@@ -448,6 +450,8 @@ def saturation_water_vapor(temp, method='HylandWexler', **kwargs):
     Returns:
         svp: satuartion water vapor pressure [Pa]
     """
+    from xarray import DataArray
+    from .esat import svp
     funcid = "[ES] "
     if not isinstance(temp, DataArray):
         raise ValueError(funcid + "Requires a DataArray class Object")
@@ -495,6 +499,12 @@ def total_precipitable_water(data, levels=None, min_levels=8, fill_nan=True, met
             W = np.sum( q * dp ) / 9.81   requires dp calculation dpres (NCL)
         The integral is with rho_water (assumed 1000) and neglected for conversion of m to mm
     """
+    import numpy as np
+    from xarray import DataArray
+    from .esat import svp
+    from .humidity import vap2sh
+    from .tpw import tpw
+
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
 
@@ -561,8 +571,9 @@ def total_precipitable_water(data, levels=None, min_levels=8, fill_nan=True, met
 
 
 def vertical_interpolation(data, dim, levels=None, min_levels=3, **kwargs):
+    from xarray import DataArray
     import numpy as np
-    from ..fun.interp import interp_profile
+    from ..fun.interp import profile
     from .. import config
 
     if not isinstance(data, DataArray):
@@ -577,7 +588,7 @@ def vertical_interpolation(data, dim, levels=None, min_levels=3, **kwargs):
     coords = dict(data.coords)
     axis = data.dims.index(dim)
     pin = data.dims[dim].values
-    values = np.apply_along_axis(interp_profile, axis, data.values, pin, levels, min_levels=min_levels)
+    values = np.apply_along_axis(profile, axis, data.values, pin, levels, min_levels=min_levels)
     coords[dim] = (dim, levels, data[dim].attrs)   # modify dimension
     data = DataArray(name=data.name, data=values, coords=coords, dims=data.dims, attrs=data.attrs)
     cmethod = "%s: intp(%d > %d)" % (dim, len(pin), len(levels))
@@ -588,7 +599,7 @@ def vertical_interpolation(data, dim, levels=None, min_levels=3, **kwargs):
     return data
 
 
-def adjust_dpd30(data, num_years=10, subset=slice(None, '1994'), value=30, bins=None, thres=1, return_mask=False,
+def adjust_dpd30(data, num_years=10, datedim='date', subset=slice(None, '1994'), value=30, bins=None, thres=1, return_mask=False,
                  **kwargs):
     """ Specifc Function to remove a certain value from the Histogram (DPD)
 
@@ -605,33 +616,26 @@ def adjust_dpd30(data, num_years=10, subset=slice(None, '1994'), value=30, bins=
     -------
     copy of DataArray
     """
+    import numpy as np
+    from xarray import DataArray
+    from ..fun import message
     from .manual import remove_spurious_values
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
 
-    data = data.copy()
-    date_dim = data.get_date_dimension()
-
-    if date_dim is None:
-        print(data.dims)
-        print(data.axes)
+    if datedim not in data.dims:
         raise ValueError("DataArray class has no datetime dimension")
 
     if bins is None:
         bins = np.arange(0, 60)
-        message("Using default bins [0, 60]", name='D30', **kwargs)
+        message("Using default bins [0, 60]", mname='D30', **kwargs)
 
-    axis = data.order.index(date_dim)
-    dates = data.dims[date_dim].values.copy()
-    itx = [slice(None)] * len(data.order)
-
-    if subset is not None:
-        dindex = date_selection(dates, subset)
-        itx[axis] = dindex
-        dates = dates[dindex]
-        message("Using Subset %s" % str(subset), name='D30', **kwargs)
-
-    values = data.values[itx]
+    axis = data.dims.index(datedim)
+    dates = data[datedim].values.copy()
+    itx = [slice(None)] * len(data.dims)
+    itx[axis] = subset
+    message("Using Subset %s" % str(subset), mname='D30', **kwargs)
+    values = data.loc[itx].values
 
     if np.sum(np.isfinite(values)) == 0:
         return data
@@ -646,12 +650,13 @@ def adjust_dpd30(data, num_years=10, subset=slice(None, '1994'), value=30, bins=
 
     values, count, mask = remove_spurious_values(dates, values, axis=axis, num_years=num_years, value=value, bins=bins,
                                                  thres=thres, **kwargs)
-    data.values[itx] = values  # Assign new values
+    data.loc[itx] = values  # Assign new values
     data.attrs['DPD%d' % int(value)] = count
 
     if return_mask:
         dmask = data.copy()
-        dmask.values = mask
+        dmask.loc[::] = False   # Everything false
+        dmask.loc = mask
         dmask.name += '_mask'
         dmask.attrs['units'] = '1'
         dmask.attrs['standard_name'] += '_mask'
@@ -685,38 +690,3 @@ def _conform(data, shape):
         if j not in n:
             data = np.expand_dims(data, axis=i)
     return data
-
-#
-# def groupby(values, index, ndims, fuzzy=False, eps=1e-4):
-#     if not isinstance(values, np.ndarray):
-#         raise ValueError()
-#     if not isinstance(index, int):
-#         raise ValueError()
-#     if not isinstance(ndims, int):
-#         raise ValueError()
-#
-#     v = np.unique(values)
-#     print v.size, " | > ", v
-#     groups = []
-#     for i in v:
-#         itx = [slice(None)] * ndims
-#         if fuzzy:
-#             itx[index] = np.where((values < (i + eps) & (values > (i - eps))))[0]
-#         else:
-#             itx[index] = np.where(values == i)[0]
-#         groups.append(itx)
-#     return groups
-#
-#
-# def groupby_apply(grouped, values, func, *args, **kwargs):
-#     if not isinstance(values, np.ndarray):
-#         raise ValueError()
-#     if not isinstance(grouped, list):
-#         raise ValueError()
-#     if not callable(func):
-#         raise ValueError()
-#     res = []
-#     for i in grouped:
-#         res.append(func(values[i], *args, **kwargs))
-#
-#     return np.vstack(res)

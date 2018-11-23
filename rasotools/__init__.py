@@ -1,10 +1,10 @@
 """
 RASOTOOLS applies raso to xarray
 """
-__version__ = '0.1'
+__version__ = '0.2'
 __author__ = 'MB'
 __status__ = 'dev'
-__date__ = 'Mi Okt  3 15:47:36 CEST 2018'
+__date__ = 'Do Nov 22 16:45:24 CET 2018'
 __institute__ = 'Univie, IMGW'
 __github__ = 'git@github.com:MBlaschek/rasotools.git'
 __doc__ = """

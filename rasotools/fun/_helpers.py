@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
-import datetime
-import os
-
-
 __all__ = ['find_files', 'now', 'message']
 
 
@@ -17,6 +11,7 @@ def now():
     str
         current date
     """
+    import datetime
     return datetime.datetime.now().isoformat()
 
 
@@ -33,6 +28,7 @@ def find_files(directory, pattern, recursive=True):
     -------
     list
     """
+    import os
     import fnmatch
     matches = []
     if recursive:

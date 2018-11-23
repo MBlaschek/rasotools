@@ -1,22 +1,10 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-import pandas as pd
 import xarray as xr
 
-# from ..met import anomaly
 from ..fun import message
 
 __all__ = ['detect_breakpoints', 'snht', 'adjustments', 'any_breakpoints', 'breakpoint_statistics', 'get_breakpoints']
-
-
-def combine_breakpoints():
-    # use snht break points
-    # use sonde type changes
-    # use documentation changes
-    # use radiosonde intercomparison data to adjust radiosonde types?
-    # how to weight these changes
-    # probability of a breakpoint ?
-    pass
 
 
 def snht(data, name=None, dep=None, axis=0, window=1460, missing=600, **kwargs):
@@ -76,6 +64,17 @@ def snht(data, name=None, dep=None, axis=0, window=1460, missing=600, **kwargs):
     data[iname + '_snht'] = (list(data.dims), stest)
     data[iname + '_snht'].attrs.update(params)
     return data
+
+
+
+def combine_breakpoints():
+    # use snht break points
+    # use sonde type changes
+    # use documentation changes
+    # use radiosonde intercomparison data to adjust radiosonde types?
+    # how to weight these changes
+    # probability of a breakpoint ?
+    pass
 
 
 def detect_breakpoints(data, name=None, axis=0, thres=50, dist=730, min_levels=3, ensemble=False, **kwargs):

@@ -81,7 +81,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         Dataset, Xarray of sounding
     """
     from .. import config
-    from ..fun import interp_dataframe
+    from ..fun import dataframe
 
     interp_new = False
 
@@ -105,7 +105,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         # READ ASCII
         data, station = read_ascii(ident, filename=filename, **kwargs)  # DataFrame
         message(ident, levels, mname='INTP', **kwargs)
-        data = interp_dataframe(data, 'pres', levels=levels, **kwargs)
+        data = dataframe(data, 'pres', levels=levels, **kwargs)
 
         # Add Metadata
         new = {}

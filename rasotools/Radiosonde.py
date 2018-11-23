@@ -6,7 +6,7 @@ import numpy as np
 import xarray as xr
 from .fun import message
 
-__all__ = ["Radiosonde"]
+__all__ = ["Radiosonde", "open_radiosonde", "load_radiosonde"]
 
 
 def dim_summary(obj):
@@ -187,13 +187,70 @@ class Radiosonde(object):
             self.data.__dict__[new_name] = self.data.__dict__.pop(old_name)
             message(old_name, " > ", new_name, mname='RENAME', **kwargs)
 
-    def inquire(self):
-        # number of data per month and levels
-        pass
+    def inquire(self, dataset, dim=None, per='M', get_counts=True, get_times=True):
+        from .met.time import count_per_times, count_per
 
-    def list_store(self):
-        # check what data are int eh raso_archive
-        pass
+        if dataset in self.data:
+            idata = self.data[dataset]
+            if get_counts or get_times:
+                tmp = {}
+                for ivar in idata.data_vars:
+                    tmp[ivar] = count_per(idata[ivar], dim=dim, per=per)
+                counts = xr.Dataset(tmp)
+                if not get_times:
+                    return counts
+
+            if get_times:
+                tmp = {}
+                for ivar in idata.data_vars:
+                    if dim in idata[ivar].dims:
+                        tmp[ivar] = count_per_times(idata[ivar], dim=dim)
+                times = xr.Dataset(tmp)
+                if not get_counts:
+                    return times
+
+            return counts, times
+
+        return None
+
+    def list_store(self, directory=None, varinfo=False, ncinfo=False):
+        import time
+        from . import config
+        from .io.info import view
+
+        if directory is None:
+            directory = config.rasodir
+
+        directory += "/%s/" % self.ident
+        if os.path.isdir(directory):
+            summe = 0
+            print("Available Files (Datasets): ")
+            print(directory)
+            for ifile in os.listdir(directory):
+                if os.path.isdir(directory + ifile):
+                    continue
+
+                current = os.path.getsize(directory + ifile) / 1024 / 1024
+                itime = time.ctime(os.path.getctime(directory + ifile))
+                print("%20s : %4d MB  : %s" % (ifile, current, itime))
+                if '.nc' in ifile:
+                    if varinfo:
+                        print('_' * 80)
+                        with xr.open_dataset(directory + ifile) as f:
+                            print("Variables: ", ", ".join(list(f.data_vars)))
+                        print('_' * 80)
+                    elif ncinfo:
+                        print('_' * 80)
+                        view(directory + ifile)
+                        print('_' * 80)
+                    else:
+                        pass
+
+                summe += current
+
+            print("\n%20s : %4d MB" % ('Sum', summe))
+        else:
+            print("Store not found!")
 
     def to_netcdf(self, name, filename=None, directory=None, force=False, xargs={}, **kwargs):
         """ Write each data variable to NetCDF 4

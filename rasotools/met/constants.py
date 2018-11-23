@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-__all__ = ['constant', 'show']
 
+# TODO make this work with DataArray / Dataset Objects and modify their units
 
 class constant(object):
     def __init__(self, value, units, desc):

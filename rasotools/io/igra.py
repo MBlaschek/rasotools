@@ -81,7 +81,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         Dataset, Xarray of sounding
     """
     from .. import config
-    from ..fun import dataframe
+    from ..fun.interp import dataframe
 
     interp_new = False
 

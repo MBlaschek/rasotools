@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-from xarray import Dataset, DataArray
-from ..fun import message
+from xarray import Dataset, DataArray, set_options
+from ..fun import message, dict2str
 
-__all__ = ['detect_breakpoints', 'snht', 'adjustments', 'any_breakpoints', 'breakpoint_statistics', 'get_breakpoints']
+__all__ = ['apply_threshold', 'snht', 'adjustments', 'any_breakpoints', 'breakpoint_statistics', 'get_breakpoints']
 
 
-def snht(data, dim='date', var=None, dep=None, window=1460, missing=600, **kwargs):
+def snht(data, dim='date', var=None, dep=None, suffix=None, window=1460, missing=600, **kwargs):
     """ Calculate a Standard Normal Homogeinity Test
 
     Args:
@@ -14,6 +14,7 @@ def snht(data, dim='date', var=None, dep=None, window=1460, missing=600, **kwarg
         dim (str): datetime dimension
         var (str): variable if Dataset
         dep (str, DataArray): departure variable
+        suffix (str): add to name of new variables
         window (int): running window (timesteps)
         missing (int): allowed missing values in window
         **kwargs:
@@ -27,9 +28,8 @@ def snht(data, dim='date', var=None, dep=None, window=1460, missing=600, **kwarg
         raise ValueError("Require a DataArray / Dataset object")
 
     if isinstance(data, DataArray):
-        if data.name is None:
-            raise ValueError("DataArray needs a var")
         idata = data.copy()
+        var = idata.name if idata.name is not None else 'var'
     else:
         ivars = list(data.data_vars)
         if len(ivars) == 1:
@@ -43,40 +43,53 @@ def snht(data, dim='date', var=None, dep=None, window=1460, missing=600, **kwarg
     if dim not in idata.dims:
         raise ValueError('requires a datetime dimension', dim)
 
+    if suffix is not None:
+        if suffix[0] != '_':
+            suffix = '_' + suffix
+            raise Warning('suffix needs an _. Added:', suffix)
+    else:
+        suffix = ''
+
     axis = idata.dims.index(dim)
     attrs = idata.attrs.copy()
+    dep_add = False
 
     if dep is not None:
         if isinstance(dep, str) and isinstance(data, Dataset):
             dep = data[dep]
+
         elif isinstance(dep, DataArray):
             dep = dep
+            dep_add = True
+
         else:
             raise ValueError("dep var not present")
 
-        idata = (idata - dep)
+        #
+        with set_options(keep_attrs=True):
+            idata = (idata - dep.reindex_like(idata))
+
         attrs['cell_method'] = 'departure ' + dep.name + attrs.get('cell_method', '')
-        idata.attrs.update(attrs)
+        idata.attrs.update(attrs)  # deprecated (xr-patch)
 
     stest = np.apply_along_axis(test, axis, idata.values, window, missing)
     attrs.update({'units': '1', 'window': window, 'missing': missing})
 
     if isinstance(data, DataArray):
-        iname = data.name
-        data = data.to_dataset()
-    else:
-        iname = var
+        data = data.to_dataset(name=var)
 
     if dep is not None:
-        data[iname + '_dep'] = idata
+        data[var + '_dep' + suffix] = idata
+        if dep_add:
+            data[dep.name if dep.name is not None else 'dep'] = dep
 
-    data[iname + '_snht'] = (list(data.dims), stest)
-    data[iname + '_snht'].attrs.update(attrs)
+    data[var + '_snht' + suffix] = (list(idata.dims), stest)
+    data[var + '_snht' + suffix].attrs.update(attrs)
     return data
 
 
-
-def combine_breakpoints():
+def combine_breakpoints(data, dim='date', var=None, **kwargs):
+    #
     # use snht break points
     # use sonde type changes
     # use documentation changes
@@ -86,107 +99,102 @@ def combine_breakpoints():
     pass
 
 
-def detect_breakpoints(data, name=None, axis=0, thres=50, dist=730, min_levels=3, ensemble=False, **kwargs):
-    """ Break Detection in timeseries using a Standard Normal Homogeneity Test (SNHT)
+def apply_threshold(data, dim='date', var=None, name='breaks', suffix=None, thres=50, dist=730, min_levels=3,
+                    ensemble=False, **kwargs):
+    """ Apply threshold on SNHT to detect breakpoints
 
-    Parameters
-    ----------
-    data : xr.DataArray / xr.Dataset
-        Input Radiosonde Data (standard)
-    name : str
-        name of variable in Dataset
-    axis : int
-        datetime axis
-    thres : int
-        threshold for SNHT
-    dist : int
-        distance between breakpoints
-    min_levels : int
-        minimum required number of significant levels
-    ensemble : bool
-        use ensemble of 50 thresholds
-    kwargs : dict
-
-    Returns
-    -------
-    xr.Dataset
-        xarray Dataset with variable name_breaks
+    Args:
+        data (DataArray, Dataset):
+        dim (str): datetime dimension
+        var (str): variable if Dataset
+        name (str): name of new variable with above threshold (breaks)
+        suffix (str): add to name of new variables
+        thres (int, float): threshold value
+        dist (int): distance between breaks
+        min_levels (int): minimum significant levels for breaks
+        ensemble (bool): run ensemble on thresholds, nthres=50,
+    Returns:
+        Dataset
     """
+    from xarray import DataArray, Dataset
     from .det import detector, detector_ensemble
-    if not isinstance(data, (xr.DataArray, xr.Dataset)):
+
+    if not isinstance(data, (DataArray, Dataset)):
         raise ValueError("Require a DataArray / Dataset object")
 
-    if isinstance(data, xr.DataArray):
-        if data.name is None:
-            raise ValueError("DataArray needs a name")
-        values = data.values
+    if not isinstance(data, (DataArray, Dataset)):
+        raise ValueError('Requires an xarray DataArray or Dataset', type(data))
+
+    if suffix is not None:
+        if suffix[0] != '_':
+            suffix = '_' + suffix
+            raise Warning('suffix needs an _. Added:', suffix)
     else:
-        ivars = list(data.data_vars)
-        if len(ivars) == 1:
-            name = ivars[0]
-        elif name is None:
-            raise ValueError("Dataset requires a name")
-        else:
-            pass
-        values = data[name].values.copy()
+        suffix = ''
 
-    if values.ndim > 2:
-        raise ValueError("Too many dimensions, please iterate")
+    if isinstance(data, DataArray):
+        idata = data.copy()  # link
+        var = idata.name if idata.name is not None else 'var'
+    else:
+        if var is None or var not in list(data.data_vars):
+            raise ValueError('Requires a variable name: var=', list(data.data_vars))
 
+        idata = data[var]  # link
+
+    if idata.ndim > 2:
+        raise ValueError("Maximum of 2 dimensions: ", idata.shape)
+
+    if dim not in idata.dims:
+        raise ValueError('requires a datetime dimension', dim)
+
+    axis = idata.dims.index(dim)
     params = {'units': '1', 'thres': thres, 'dist': dist, 'min_levels': min_levels}
 
     if ensemble:
-        breaks = detector_ensemble(values, axis=axis, nthres=50, **kwargs)
+        kwargs['nthres'] = kwargs.get('nthres', 50)
+        breaks = detector_ensemble(idata.values, axis=axis, **kwargs)
         params['thres'] = 'ens50'
     else:
-        breaks = detector(values, axis=axis, dist=dist, thres=thres, min_levels=min_levels, **kwargs)
+        breaks = detector(idata.values, axis=axis, dist=dist, thres=thres, min_levels=min_levels, **kwargs)
 
-    if isinstance(data, xr.DataArray):
-        iname = data.name
-        data = data.to_dataset()
-    else:
-        iname = name
+    name = var + '_' + name + suffix
+    if isinstance(data, DataArray):
+        data = idata.to_dataset(name=var)
 
-    data[iname + '_breaks'] = (list(data.dims), breaks)
-    data[iname + '_breaks'].attrs.update(params)
+    data[name] = (list(idata.dims), breaks)
+    data[name].attrs.update(params)
     return data
 
 
-def any_breakpoints(data, name=None, axis=0, **kwargs):
-    """ Check for breakpoints
+def any_breakpoints(data, dim='date', var=None, **kwargs):
+    """ Check if there are any breakpoints
 
-    Parameters
-    ----------
-    data : xr.DataArray / xr.Dataset
-    name : str
-    axis : int
-    kwargs : dict
+    Args:
+        data (DataArray): input data
+        dim (str): datetime dim
+        var (str): variable
+        **kwargs:
 
-    Returns
-    -------
-    bool
-        Any breakpoints?
+    Returns:
+        bool : breakpoints yes/no
     """
-
-    if not isinstance(data, (xr.DataArray, xr.Dataset)):
+    if not isinstance(data, (DataArray, Dataset)):
         raise ValueError("Require a DataArray / Dataset object")
 
-    if isinstance(data, xr.DataArray):
-        if data.name is None:
-            raise ValueError("DataArray needs a name")
-        i, d, n = get_breakpoints(data, axis=axis, dates=True, nlevs=True)
+    if isinstance(data, Dataset):
+        if var not in data.data_vars:
+            raise ValueError("Dataset requires a var")
+        idata = data[var]
     else:
-        ivars = list(data.data_vars)
-        if len(ivars) == 1:
-            name = ivars[0]
-        elif name is None:
-            raise ValueError("Dataset requires a name")
-        else:
-            pass
-        i, d, n = get_breakpoints(data[name], axis=axis, dates=True, nlevs=True)
+        idata = data
+
+    if dim not in idata.dims:
+        raise ValueError("Requires a datetime dimension", idata.dims)
+
+    i, d, n = get_breakpoints(idata, dim=dim, dates=True, nlevs=True)
 
     if len(i) > 0:
-        message("[%8s] [%27s]    [#]" %('idx','date'), **kwargs)
+        message("[%8s] [%27s]    [#]" % ('idx', 'date'), **kwargs)
         message("\n".join(["[%8s] %s L: %3d" % (j, k, l) for j, k, l in zip(i, d, n)]), **kwargs)
         return True
 
@@ -194,96 +202,147 @@ def any_breakpoints(data, name=None, axis=0, **kwargs):
     return False
 
 
-def adjustments(data, name, breakname, axis=0, dep_var=None, mean_cor=True, quantile_cor=True, quantile_adj=None, quantilen=None,
-                **kwargs):
-    """Detect and Correct Radiosonde biases from Departure Statistics
-    Use ERA-Interim departures to detect breakpoints and
-    adjustments these with a mean and a quantile adjustment going back in time.
+"""Detect and Correct Radiosonde biases from Departure Statistics
+Use ERA-Interim departures to detect breakpoints and
+adjustments these with a mean and a quantile adjustment going back in time.
 
-    uses raso.timeseries.bp.analyse / correction
+uses raso.timeseries.bp.analyse / correction
+
+Args:
+    data         (DataArray) :  input data
+    bdata        (DataArray) :  input data breakpoints
+    dep_var      (str)       :  calculate departure from that variable
+    mean_cor     (bool)      :  calc. mean adjustments
+    quantile_cor (bool)      :  cacl. quantile adjustments
+    quantile_adj (bool)      :  cacl. quantile adjustments from that variable
+    quantilen    (list)      :  percentiles
+
+Keyword Args:
+    sample_size (int)   :  minimum Sample size [130]
+    borders     (int)   :  biased sample before and after a break [None]
+    bounded     (tuple) :  limit correction to bounds
+    recent      (bool)  :  Use all recent Data to adjustments
+    ratio       (bool)  :  Use ratio instead of differences
+    ref_period  (slice) :  Reference period for quantile_adj
+    adjust_reference (bool) : adjust reference for quantile_adj
+
+Returns:
+    bool, DataArray, ... :
+"""
+
+
+def adjustments(data, name, breakname, dim='date', dep_var=None, suffix=None, mean_cor=True, quantile_cor=True,
+                quantile_adj=None, quantilen=None, **kwargs):
+    """Detect and Correct Radiosonde biases from Departure Statistics
+Use ERA-Interim departures to detect breakpoints and
+adjustments these with a mean and a quantile adjustment going back in time.
+
 
     Args:
-        data         (DataArray) :  input data
-        bdata        (DataArray) :  input data breakpoints
-        dep_var      (str)       :  calculate departure from that variable
-        mean_cor     (bool)      :  calc. mean adjustments
-        quantile_cor (bool)      :  cacl. quantile adjustments
-        quantile_adj (bool)      :  cacl. quantile adjustments from that variable
-        quantilen    (list)      :  percentiles
+        data (Dataset): Input Dataset with different variables
+        name (str): Name of variable to adjust
+        breakname (str): Name of variable with breakpoint information
+        dim (str): datetime dimension
+        dep_var (str): Name of variable to use as a departure
+        suffix (str): add to name of new variables
+        mean_cor (bool): apply mean adjustments
+        quantile_cor (bool): apply quantil adjustments
+        quantile_adj (bool): apply quantil-ERA adjustments
+        quantilen (list): quantiles for quantile_cor
 
-    Keyword Args:
-        sample_size (int)   :  minimum Sample size [130]
-        borders     (int)   :  biased sample before and after a break [None]
-        bounded     (tuple) :  limit correction to bounds
-        recent      (bool)  :  Use all recent Data to adjustments
-        ratio       (bool)  :  Use ratio instead of differences
-        ref_period  (slice) :  Reference period for quantile_adj
-        adjust_reference (bool) : adjust reference for quantile_adj
+    Optional Args:
+        sample_size (int):  minimum Sample size [130]
+        borders (int):  biased sample before and after a break [None]
+        bounded (tuple):  limit correction to bounds
+        recent (bool):  Use all recent Data to adjustments
+        ratio (bool):  Use ratio instead of differences
 
     Returns:
-        bool, DataArray, ... :
+        Dataset
     """
-    # todo post adjustment departures and similarity of past and new breakpoints
-    # todo success report
     from . import adj
-    if not isinstance(data, xr.Dataset):
-        raise ValueError("Requires a Dataset object")
+    if not isinstance(data, Dataset):
+        raise ValueError("Requires a Dataset object", type(data))
+
     if not isinstance(name, str):
-        raise ValueError("Requires a string name")
+        raise ValueError("Requires a string name", type(name))
+
     if name not in data.data_vars:
         raise ValueError("data var not present")
+
     if breakname not in data.data_vars:
         raise ValueError("requires a breaks data var")
 
     idata = data[name].copy()
+
     if dep_var is not None:
         if dep_var not in data.data_vars:
-            raise ValueError("dep var not present")
+            raise ValueError("dep var not present", data.data_vars)
 
-        idata = (idata - dep_var)
+        with set_options(keep_attrs=True):
+            idata = (idata - data[dep_var].reindex_like(idata))
+
+    if suffix is not None:
+        if suffix[0] != '_':
+            suffix = '_' + suffix
+            Warning('suffix needs an _. Added:', suffix)
+    else:
+        suffix = ''
 
     if quantilen is None:
         quantilen = np.arange(0, 101, 10)
 
     if quantile_adj is not None:
-        idata, quantile_adj = xr.align(idata, quantile_adj, join='left')  # Make sure it is the same shape
-        if dep_var is not None:
-            quantile_adj = quantile_adj - dep_var  # Make sure it's the same space
+        if quantile_adj not in data.data_vars:
+            raise ValueError("quantile_adj var not present", data.data_vars)
+
+        adj = data[quantile_adj].reindex_like(idata)
+        # if dep_var is not None:
+        #     with set_options(keep_attrs=True):
+        #         adj = adj - data[dep_var].reindex_like(idata)  # Make sure it's the same space
 
     values = idata.values
-    ibreaks = get_breakpoints(data[breakname], axis=axis)  # just indices
+    axis = idata.dims.index(dim)
+    params = idata.attrs.copy()  # deprecated (xr-patch)
+    ibreaks = get_breakpoints(data[breakname], dim=dim)  # just indices
+    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(quantilen), "Dep:", str(dep_var), "Adj:", str(quantile_adj),
+            '#B:', len(ibreaks), **kwargs)
 
-    params = {'sample_size': kwargs.get('sample_size', 730),
-              'borders': kwargs.get('borders', 180),
-              'bounded': str(kwargs.get('bounded', '')),
-              'recent': kwargs.get('recent', False),
-              'ratio': kwargs.get('ratio', True)}
+    params.update({'sample_size': kwargs.get('sample_size', 730),
+                   'borders': kwargs.get('borders', 180),
+                   'bounded': str(kwargs.get('bounded', '')),
+                   'recent': kwargs.get('recent', False),
+                   'ratio': kwargs.get('ratio', True)})
+
+    message(dict2str(params), level=1, **kwargs)
+    stdn = data[name].attrs.get('standard_name', name)
 
     if mean_cor:
-        data[idata.name + '_m'] = (idata.dims, adj.mean(values, ibreaks, **kwargs))
-        data[idata.name + '_m'].attrs.update(params)
-        data[idata.name + '_m'].attrs['biascor'] = 'mean'
-        data[idata.name + '_m'].attrs['standard_name'] += '_mean_adj'
+        data[name + '_m' + suffix] = (idata.dims, adj.mean(values, ibreaks, axis=axis, **kwargs))
+        data[name + '_m' + suffix].attrs.update(params)
+        data[name + '_m' + suffix].attrs['biascor'] = 'mean'
+        data[name + '_m' + suffix].attrs['standard_name'] = stdn + '_mean_adj'
 
     if quantile_cor:
-        data[idata.name + '_q'] = (idata.dims, adj.quantile(values, ibreaks, axis=axis, quantilen=quantilen, **kwargs))
-        data[idata.name + '_q'].attrs.update(params)
-        data[idata.name + '_q'].attrs['biascor'] = 'quantil'
-        data[idata.name + '_q'].attrs['standard_name'] += '_quantil_adj'
+        data[name + '_q' + suffix] = (
+        idata.dims, adj.quantile(values, ibreaks, axis=axis, quantilen=quantilen, **kwargs))
+        data[name + '_q' + suffix].attrs.update(params)
+        data[name + '_q' + suffix].attrs['biascor'] = 'quantil'
+        data[name + '_q' + suffix].attrs['standard_name'] = stdn + '_quantil_adj'
 
-    if quantile_adj:
-        qe_adj, qa_adj = adj.quantile_reference(values, quantile_adj.values, ibreaks, axis=axis, quantilen=quantilen,
+    if quantile_adj is not None:
+        qe_adj, qa_adj = adj.quantile_reference(values, adj.values, ibreaks, axis=axis, quantilen=quantilen,
                                                 **kwargs)
-        data[idata.name + '_qe'] = (idata.dims, qe_adj)
-        data[idata.name + '_qe'].attrs.update(params)
-        data[idata.name + '_qe'].attrs['biascor'] = 'quantil_era'
-        data[idata.name + '_qe'].attrs['standard_name'] += '_quantil_era_adj'
+        data[name + '_qe' + suffix] = (idata.dims, qe_adj)
+        data[name + '_qe' + suffix].attrs.update(params)
+        data[name + '_qe' + suffix].attrs['biascor'] = 'quantil_era'
+        data[name + '_qe' + suffix].attrs['standard_name'] = stdn + '_quantil_era_adj'
 
-        data[idata.name + '_adj'] = (idata.dims, qe_adj)
-        data[idata.name + '_adj'].attrs.update(params)
-        data[idata.name + '_adj'].attrs['biascor'] = 'quantil_era'
-        data[idata.name + '_adj'].attrs['standard_name'] += '_quantil_era_adj'
-        data[idata.name + '_adj'].attrs['standard_name'] += '_quantil_era_adj'
+        data[name + '_adj' + suffix] = (idata.dims, qe_adj)
+        data[name + '_adj' + suffix].attrs.update(params)
+        data[name + '_adj' + suffix].attrs['biascor'] = 'quantil_era'
+        data[name + '_adj' + suffix].attrs['standard_name'] = stdn + '_quantil_era_adj'
+        data[name + '_adj' + suffix].attrs['standard_name'] = stdn + '_quantil_era_adj'
 
     return data
 
@@ -385,137 +444,158 @@ def correct_2var(xdata, ydata):
     pass
 
 
-def breakpoint_statistics(data, name, breakname, axis=0, functions=None, borders=30, max_sample=1460, func_kwargs={}, **kwargs):
-    from ..fun import vrange
-    from .adj import break_iterator
-
-    if not isinstance(data, xr.Dataset):
+def breakpoint_statistics(data, breakname, dim='date', agg='mean', borders=None, inbetween=True, max_sample=None,
+                          **kwargs):
+    if not isinstance(data, Dataset):
         raise ValueError("Requires a Dataset class object")
 
-    if not isinstance(name, str):
-        raise ValueError("Requires a str")
-
-    if name not in data.data_vars:
-        raise ValueError("var name not present")
+    if dim not in data.coords:
+        raise ValueError("Requires a datetime dimension", data.coords)
 
     if breakname not in data.data_vars:
         raise ValueError("var name breaks not present")
 
-    if max_sample is None or max_sample < 0:
-        max_sample = 1e9  # too large, will never be used #todo max_sample = None
+    if agg not in dir(Dataset):
+        raise ValueError("agg not found", agg)
 
-    if functions is None:
-        functions = [np.nanmean, np.nanstd]
-
-    ibreaks = get_breakpoints(data[breakname], axis=axis)
+    data = data.copy()
+    ibreaks = get_breakpoints(data[breakname], dim=dim)
 
     nb = len(ibreaks)
     if nb == 0:
         message("Warning no Breakpoints found", level=0, **kwargs)
         return
 
-    date_dim = data[name].dims[axis]
-    shape = list(data[name].values.shape)
+    if borders is None:
+        borders = 0
 
-    dep = {getattr(ifunc, '__name__'): [] for ifunc in functions}
+    # calculate regions
+    region = np.zeros(data[dim].size)
+    j = 0
+    k = len(ibreaks) + 1
+    i = 0
+    for i in ibreaks:
+        if max_sample is not None:
+            region[slice(i - borders - max_sample, i - borders)] = k
+        else:
+            region[slice(j, i - borders)] = k
 
-    dep['counts'] = []
-    dates = data.coords[date_dim].values
-    jbreaks = sorted(ibreaks, reverse=True)
-    jbreaks.append(0)
-    idims = list(data[name].dims)
-    jdims = idims.copy()
-    jdims.pop(axis)
-    func_kwargs.update({'axis': axis})
-    # iterate from now to past breakpoints
-    for i, ib in enumerate(break_iterator(ibreaks, axis, shape, borders=borders, max_sample=max_sample)):
-        period = vrange(dates[ib[axis]])
-        idate = dates[jbreaks[i]]
-        tmp = np.sum(np.isfinite(data[name][ib]), axis=axis)  # is an DataArray
-        tmp.coords[date_dim] = idate
-        tmp.coords['start'] = period[0]
-        tmp.coords['stop'] = period[1]
-        dep['counts'].append(tmp.copy())  # counts
+        if j > 0 and borders > 0 and inbetween:
+            region[slice(j - 2 * borders, j)] = k + 0.5  # in between
 
-        for j, ifunc in enumerate(functions):
-            iname = getattr(ifunc, '__name__')
-            # Requires clear mapping of input and output dimensions
-            tmp = xr.apply_ufunc(ifunc, data[name][ib],
-                                 input_core_dims=[idims],
-                                 output_core_dims=[jdims],
-                                 kwargs=func_kwargs)
-            # tmp = ifunc(data[name][ib], axis=axis, **func_kwargs)  # only for functions with ufunc capability
-            tmp.coords[date_dim] = idate
-            tmp.coords['start'] = period[0]
-            tmp.coords['stop'] = period[1]
-            dep[iname].append(tmp.copy())
+        j = i + borders
+        k -= 1
 
-    for ifunc, ilist in dep.items():
-        dep[ifunc] = xr.concat(ilist, dim=date_dim)
+    if borders > 0 and inbetween:
+        region[slice(i - borders, i + borders)] = k + 0.5
 
-    dep = xr.Dataset(dep)
-    return dep
+    region[slice(i + borders, None)] = k
+    data['region'] = ('date', region)
+    region = data['region'].copy()
+    # Use regions to groupby and apply functions
+    data = eval("data.groupby('region').%s('%s')" % (agg, dim))
+    data = data.isel(region=data.region > 0)  # remove 0 region (to be excluded)
+    return data, region.where(region > 0)
 
-
-#
-# def reference_period(data, dep_var=None, quantilen=None, clim_subset=None, **kwargs):
-#     funcid = "[DC] Ref.P "
-#     if not isinstance(data, DataArray):
-#         raise ValueError(funcid + "Requires a DataArray class object")
-#
-#     data = data.copy()
-#     date = data.get_date_dimension()
-#     dates = data.dims[date].values
-#     if dep_var is not None:
-#         if not isinstance(dep_var, DataArray):
-#             raise ValueError(funcid + "Requires a DataArray class object")
-#
-#         dep_var = data.align(dep_var)  # implicit copy
-#         dep = data - dep_var  # Departures (do the units match?)
-#     else:
-#         dep_var, _ = anomaly(data, period=clim_subset)
-#         dep = dep_var
-#
-#     if quantilen is None:
-#         quantilen = np.arange(0, 101, 10)
-#
-#     status, sdata, bdata = detect(dep, **kwargs)
-#     period = slice(None)
-#
-#     # if status:
-#     #     # find best matching period
-#     #     if quantilen is None:
-#     #         np.nanmedian( sample1, sample2 )
-#     #     else:
-#     #         np.nanpercentile()
-#     #         difference
-#
-#     return period
+    # shape = list(data[name].values.shape)
+    #
+    # dep = {getattr(ifunc, '__name__'): [] for ifunc in functions}
+    #
+    # dep['counts'] = []
+    # dates = data.coords[dim].values
+    # jbreaks = sorted(ibreaks, reverse=True)
+    # jbreaks.append(0)
+    # idims = list(data[name].dims)
+    # jdims = idims.copy()
+    # jdims.pop(axis)
+    # func_kwargs.update({'axis': axis})
+    # #
+    # # iterate from now to past breakpoints
+    # #
+    # for i, ib in enumerate(break_iterator(ibreaks, axis, shape, borders=borders, max_sample=max_sample)):
+    #     period = vrange(dates[ib[axis]])
+    #     idate = dates[jbreaks[i]]
+    #     tmp = np.sum(np.isfinite(data[name][ib]), axis=axis)  # is an DataArray
+    #     tmp.coords[dim] = idate
+    #     tmp.coords['start'] = period[0]
+    #     tmp.coords['stop'] = period[1]
+    #     dep['counts'].append(tmp.copy())  # counts
+    #
+    #     for j, ifunc in enumerate(functions):
+    #         iname = getattr(ifunc, '__name__')
+    #         # Requires clear mapping of input and output dimensions
+    #         tmp = apply_ufunc(ifunc, data[name][ib],
+    #                           input_core_dims=[idims],
+    #                           output_core_dims=[jdims],
+    #                           kwargs=func_kwargs)
+    #         # tmp = ifunc(data[name][ib], axis=axis, **func_kwargs)
+    #         # only for functions with ufunc capability
+    #         tmp.coords[dim] = idate
+    #         tmp.coords['start'] = period[0]
+    #         tmp.coords['stop'] = period[1]
+    #         dep[iname].append(tmp.copy())
+    #
+    # for ifunc, ilist in dep.items():
+    #     dep[ifunc] = concat(ilist, dim=dim)
+    #
+    # dep = Dataset(dep)
+    # return dep
 
 
-def get_breakpoints(data, sign=1, axis=0, dates=False, nlevs=False):
+def reference_period(data, dim='date', dep_var=None, period=None, **kwargs):
+    from ..met.time import anomaly
+
+    if not isinstance(data, DataArray):
+        raise ValueError("Requires a DataArray class object", type(data))
+
+    if dim not in data.dims:
+        raise ValueError("Requires a datetime dimension", data.dims)
+
+    data = data.copy()
+    # attrs ?
+
+    if dep_var is not None:
+        if not isinstance(dep_var, DataArray):
+            raise ValueError("Requires a DataArray class object", type(dep_var))
+
+        dep = data - dep_var  # Departures (do the units match?)
+    else:
+        dep, _ = anomaly(data, dim=dim, period=period)
+
+    # find best matching period (lowest differences)
+    #
+    return None
+
+
+def get_breakpoints(data, dim='date', sign=1, dates=False, nlevs=False):
     """ Get breakpoint datetime indices from Breakpoint DataArray
 
-    Parameters
-    ----------
-    data : xr.DataArray
-    sign : int
-    axis : int
-    dates : bool
-    nlevs : bool
+    Args:
+        data (DataArray): input data
+        dim (str): datetime dimension
+        sign (int): threshold value
+        dates (bool): return dates
+        nlevs (bool): return levels
 
-    Returns
-    -------
+    Returns:
+        list
 
     """
-    if not isinstance(data, xr.DataArray):
-        raise ValueError()
+    from xarray import DataArray
+    if not isinstance(data, DataArray):
+        raise ValueError('Requires a DataArray', type(data))
+
+    if dim not in data.dims:
+        raise ValueError('Requires a datetime dimension', dim)
 
     t = np.where(data.values >= sign)
-    datedim = data.dims[axis]
+    axis = data.dims.index(dim)
     indices = list(map(int, np.unique(t[axis])))
+
     if dates and nlevs:
-        return indices, data[datedim].values[indices], [(data.values[i] > 1).sum(axis=axis) for i in indices]
+        return indices, data[dim].values[indices], [(data.values[i] > 1).sum(axis=axis) for i in indices]
+
     if dates:
-        return indices, data[datedim].values[indices]
+        return indices, data[dim].values[indices]
+
     return indices

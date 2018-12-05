@@ -37,11 +37,17 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bou
     imax = data.shape[axis]
     # Last Breakpoint
     if (breaks[-1] + sample_size) > imax:
-        message(Warning("Reference Dataset is shorter than 1 year"), **kwargs)
+        message(Warning("Reference Dataset is short <%d" % sample_size), **kwargs)
 
     for ib in reversed(range(nb)):
+        # Biased: [MAX, Breakpoint]  will be adjusted
+        # Sample: [MAX, Breakpoint - Borders]  used for calc.
+        # Reference: [Breakpoint + Borders, MAX]  used for calc.
         ibiased, isample, iref = index_samples(breaks, ib, axis, data.shape, recent=recent, sample_size=sample_size,
                                                borders=borders, max_sample=max_sample)
+
+        message(ib, 'Apply:', ibiased[axis], 'Cal:', isample[axis], 'Comp:', iref[axis], 'B:', borders, 'M:',
+                max_sample, **kwargs)
 
         data[ibiased] = dep.mean(data, iref, isample, axis=axis, sampleout=ibiased, sample_size=sample_size,
                                  bounded=bounded, ratio=ratio)
@@ -134,7 +140,7 @@ def quantile_reference(xdata, ydata, breaks, axis=0, quantilen=None, sample_size
                 raise ValueError('Reference period needs to be a list or slice')
 
         # Apply Dist. from xdata[ref_period] to all ydata  (Match dists.)
-        ydata = dep.quantile_reference(ydata, xdata, all_period, ref_period, quantilen, axis=axis,
+        ydata = dep.quantile_reference(ydata, xdata, tuple(all_period), tuple(ref_period), quantilen, axis=axis,
                                        sampleout=slice(None), sample_size=sample_size, bounded=bounded, ratio=ratio)
 
     # 2. Loop Breakpoints and adjust backwards using adjusted ydata as reference
@@ -174,7 +180,7 @@ def index_samples(breaks, ibreak, axis, dshape, recent=False, sample_size=130, b
 def idx2shp(period, axis, shape):
     index = [slice(None)] * len(shape)
     index[axis] = period
-    return index
+    return tuple(index)
 
 
 def sample_indices(breaks, ibreak, imax, recent=False):
@@ -204,24 +210,24 @@ def sample_indices(breaks, ibreak, imax, recent=False):
         ende = breaks[ibreak + 1]  # bp before
 
     sample1 = slice(anfang, mitte)  # erste Teil (indices niedriger)
-    sample2 = slice(mitte, ende)    # Zweite Teil (indices höher)
+    sample2 = slice(mitte, ende)  # Zweite Teil (indices höher)
     return sample1, sample2
 
 
 def adjust_samples(ibiased, iref, sample_size, borders, max_sample):
     # start -> kleiner index (nächster Bruchpunkt, früher)
     # stop -> grosser index (Bruchpunkt)
-    n = ibiased.stop - ibiased.start   # sample size
+    n = ibiased.stop - ibiased.start  # sample size
     isample = slice(ibiased.start, ibiased.stop)  # isample == ibiased
-    if n - 2*borders > sample_size:
+    if n - 2 * borders > sample_size:
         isample = slice(ibiased.start + borders, ibiased.stop - borders)  # ohne Borders
-        if n - 2*borders > max_sample:
+        if n - 2 * borders > max_sample:
             isample = slice(ibiased.stop - borders - max_sample, ibiased.stop - borders)  # nur max_sample
 
     n = iref.stop - iref.start
-    if n - 2*borders > sample_size:
+    if n - 2 * borders > sample_size:
         iref = slice(iref.start + borders, iref.stop - borders)
-        if n - 2*borders > max_sample:
+        if n - 2 * borders > max_sample:
             iref = slice(iref.start, iref.start + max_sample)
 
     return isample, iref
@@ -255,14 +261,14 @@ def break_iterator(breaks, axis, dshape, left_align=True, borders=30, max_sample
     breaks.append(0)
     breaks = sorted(breaks, reverse=True)  # from present (large) to past (small)
     out = []
-    jb = dshape[axis]   # maximum date index
+    jb = dshape[axis]  # maximum date index
 
     for i, ib in enumerate(breaks):
         sample = slice(ib, jb)  # smaller to larger index
         n = jb - ib
-        if n > 2*borders:
+        if n > 2 * borders:
             sample = slice(ib + borders, jb - borders)
-            if n - 2*borders > max_sample:
+            if n - 2 * borders > max_sample:
                 if left_align:
                     sample = slice(ib + borders, ib + borders + max_sample)
                 else:

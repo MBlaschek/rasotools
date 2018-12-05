@@ -39,28 +39,23 @@ def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwa
     return tmp/np.max(tmp)
 
 
-def detector(data, axis=0, dist=365, thres=50, min_levels=3, weights=None, **kwargs):
+def detector(data, axis=0, dist=365, thres=50, min_levels=3, start=False, start_middle=False, **kwargs):
     if not isinstance(data, np.ndarray):
         raise ValueError("requires an array: %s" % str(type(data)))
 
-    # check weights
-    if weights is not None:
-        if data.shape != weights.shape:
-            weights = None
+    breaks = np.where(data >= thres, 1, 0)  # mark
 
-    breaks = np.full(data.shape, 0)
-    # Above threshold
-    ibreaks = np.where(data >= thres, 1, 0)
     if data.ndim > 1:
         # number of breaks per timeunit
-        ibreak = np.sum(ibreaks, axis=1 if axis == 0 else 0)
+        ibreak = np.sum(breaks, axis=1 if axis == 0 else 0)
         # combine #-breaks and sum of test
         comb = np.sum(data, axis=1 if axis == 0 else 0) * ibreak
+
         # find local maxima (within distance)
         imax = local_maxima(comb, dist=dist)
     else:
         # find local maxima (within distance)
-        imax = local_maxima(data * ibreaks, dist=dist)
+        imax = local_maxima(data * breaks, dist=dist)
 
     if len(imax) > 0:
         imax = np.asarray(imax)
@@ -68,66 +63,30 @@ def detector(data, axis=0, dist=365, thres=50, min_levels=3, weights=None, **kwa
         if data.ndim > 1:
             message("Update (", min_levels, "):", str(ibreak[imax]), **kwargs)
             imax = imax[ibreak[imax] >= min_levels]
-            message("Update (Levels): ", str(imax), **kwargs)
+            if start:
+                # get the start of these breakpoints
+                if start_middle:
+                    # or add the integer mean
+                    imax = [i + find_constant(comb[i:], 10, n=100)//2 for i in imax]
+                else:
+                    imax = [i + find_constant(comb[i:], 10, n=100) for i in imax]
+
+                message("Update (Levels) + Start: ", str(imax), **kwargs)
+            else:
+                message("Update (Levels): ", str(imax), **kwargs)
+
             itx = [slice(None)] * data.ndim
             itx[axis] = imax
-            breaks[itx] = np.where(data[itx] >= thres, 1, 0) + 1   # 0 nix, 1 breakpoint, 2 significant level
+            # fill new values
+            # 1: significant
+            # 2: ende
+            # 3: start
+            # 4: breakpoint
+            breaks[tuple(itx)] = np.where(data[tuple(itx)] >= thres, 1, 0) + 1   # 0 nix, 1 breakpoint, 2 significant level
         else:
             breaks[imax] = 1
+
     return breaks
-
-
-def sync_breakpoints(data, axis=0, window=1460, dist=365, thres=50, min_levels=3, missing=600, weights=None, **kwargs):
-    """ sync breakpoints between sounding times
-    -> 0 and 12, only make common breaks
-
-    Args:
-        data:
-        axis:
-        window:
-        dist:
-        thres:
-        min_levels:
-        missing:
-        weights:
-        **kwargs:
-
-    Returns:
-
-    """
-    if not isinstance(data, np.ndarray):
-        raise ValueError("requires an array: %s" % str(type(data)))
-
-    breaks = np.full(data.shape, 0)
-    # Calculate Test statistics for every value
-    # stest = np.apply_along_axis(test, axis, data, window, missing)
-    # Above threshold
-    ibreaks = np.where(data >= thres, 1, 0)
-    if data.ndim > 1:
-        # number of breaks per timeunit
-        ibreak = np.sum(ibreaks, axis=1 if axis == 0 else 0)
-        # combine #-breaks and sum of test
-        comb = np.sum(data, axis=1 if axis == 0 else 0) * ibreak
-        # find local maxima (within distance)
-        imax = local_maxima(comb, dist=dist)
-    else:
-        # find local maxima (within distance)
-        imax = local_maxima(data * ibreaks, dist=dist)
-
-    if len(imax) > 0:
-        imax = np.asarray(imax)
-        message("Breaks: " + str(imax), **kwargs)
-        if data.ndim > 1:
-            message("Update (", min_levels, "):", str(ibreak[imax]), **kwargs)
-            imax = imax[ibreak[imax] >= min_levels]
-            message("Update (Levels): ", str(imax), **kwargs)
-            itx = [slice(None)] * data.ndim
-            itx[axis] = imax
-            breaks[itx] = np.where(data[itx] >= thres, 1, 0) + 1
-        else:
-            breaks[imax] = 1
-        return True, data, breaks
-    return False, data, breaks
 
 
 def percentile_detector(data, reference, freq, min_levels, percentiles=None, weights=None, verbose=0):
@@ -142,58 +101,6 @@ def percentile_detector(data, reference, freq, min_levels, percentiles=None, wei
     # nanpercentile ->
 
     return
-
-
-def detector_2d_var(xdata, ydata, window, dist, thres, min_levels, axis=0, weights=None, verbose=0):
-    """ combine two variables and find common break points
-
-    Args:
-        xdata:
-        ydata:
-        window:
-        dist:
-        thres:
-        min_levels:
-        axis:
-        weights:
-        verbose:
-
-    Returns:
-
-    """
-    if not isinstance(xdata, np.ndarray):
-        raise ValueError("requires an array: %s" % str(type(xdata)))
-    if not isinstance(ydata, np.ndarray):
-        raise ValueError("requires an array: %s" % str(type(ydata)))
-
-    breaks = np.zeros(xdata.shape)
-    xstest = np.squeeze(np.apply_along_axis(test, axis, xdata, window, window / 4))  # per level
-    ystest = np.squeeze(np.apply_along_axis(test, axis, ydata, window, window / 4))  # per level
-    # above threshold
-    # multiply both above threshold and check if any survives
-
-    if weights is None:
-        weights = np.ones(xstest.shape[1])
-
-    ximax = np.asarray(local_maxima(np.sum(xstest * weights[np.newaxis, :], 1), dist=dist))  # No local Maxima found ?
-    yimax = np.asarray(local_maxima(np.sum(ystest * weights[np.newaxis, :], 1), dist=dist))  # No local Maxima found ?
-    # how to combine two variables for testing?
-    if len(ximax) == 0:
-        message("No Maxima detected (%d, MAX: %f) Dist: %d" % (xstest.shape[0], np.max(xstest), dist),
-                verbose)
-        return False, None, None
-
-    tstat = np.sum((xstest[ximax, :] * weights[np.newaxis, :]) > thres, 1)  # number of significant levels per bp
-    if not np.any(tstat >= min_levels):
-        message(
-            "No Breakpoints detected: min_levels (%d) found: %d" % (min_levels, np.max(tstat)),
-            verbose)
-        return False, None, None
-
-    with np.errstate(invalid='ignore'):
-        breaks[ximax] = (1 + np.int_(xstest[ximax] > thres)) * (np.where(tstat >= min_levels, 1, -1))[:, np.newaxis]
-
-    return True, xstest, breaks
 
 
 def test(x, window, missing):
@@ -286,16 +193,18 @@ def numba_snhtmov(t, tsa, snhtparas, count, tmean, tsquare):
                     tsa[k] = 0.
     return
 
+
 @njit
 def local_maxima(x, dist=365):
-    minima = []  # Leere Liste
+    maxima = []  # Leere Liste
     # Iteriere von 2 bis vorletzten Element
     # ist iterator integer
     for i in range(dist, len(x) - dist):
         # Element davor und danach größer
         if np.all((x[i] > x[slice(i + 1, i + dist)])) and np.all((x[slice(i - dist, i)] < x[i])):
-            minima.append(i)
-    return minima
+            maxima.append(i)
+    return maxima
+
 
 @njit
 def local_minima(x, dist=365):
@@ -307,3 +216,28 @@ def local_minima(x, dist=365):
         if np.all((x[i] < x[slice(i + 1, i + dist)])) and np.all((x[slice(i - dist, i)] > x[i])):
             minima.append(i)
     return minima
+
+
+@njit
+def find_constant(x, v, n=100):
+    for i in range(0, len(x) - n):
+        if np.sum(np.abs(np.diff(x[slice(i, i + n + 1)])) <= v) == n:
+            break
+    return i
+
+
+@njit
+def local_maxima_start(x, dist=365, n=100, v=10, start=True):
+    maxima = []  # Leere Liste
+    # Iteriere von 2 bis vorletzten Element
+    # ist iterator integer
+    for i in range(dist, len(x) - dist):
+        # Element davor und danach größer
+        if np.all((x[i] > x[slice(i + 1, i + dist)])) and np.all((x[slice(i - dist, i)] < x[i])):
+            # found a local maxima
+            j = find_constant(x[i:], v, n=n)
+            if start:
+                maxima.append(i + j)
+            else:
+                maxima.append(i + np.argmin(np.abs(np.median(x[i:i + j + 1]) - x[i:i + j + 1])))
+    return maxima

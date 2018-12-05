@@ -1,32 +1,28 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ['find_files', 'now', 'message']
+__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed']
 
 
 def now():
-    """
-    Functions returns the current date string
-    Returns
-    -------
-    str
-        current date
+    """ Datetime string
+
+    Returns:
+        str : datetime now
     """
     import datetime
     return datetime.datetime.now().isoformat()
 
 
 def find_files(directory, pattern, recursive=True):
-    """ Find files in a directory give a pattern
+    """ find files
 
-    Parameters
-    ----------
-    directory       str
-    pattern         str
-    recursive       bool
+    Args:
+        directory (str): directory path
+        pattern (str):  regex string: '*.nc'
+        recursive (bool): recursive search?
 
-    Returns
-    -------
-    list
+    Returns:
+        list: of files
     """
     import os
     import fnmatch
@@ -41,25 +37,6 @@ def find_files(directory, pattern, recursive=True):
 
 
 def message(*args, mname=None, verbose=0, level=0, logfile=None, **kwargs):
-    """
-
-    Parameters
-    ----------
-    args : list
-    mname : str
-        Message Name
-    level : int
-        Level of Messaging
-    logfile : str
-        filename of Logfile to write to
-    verbose : int
-        verboseness in combination with level
-    kwargs : dict
-
-    Returns
-    -------
-
-    """
     if logfile is not None:
         # with open(kwargs['filename'], 'a' if not kwargs.get('force', False) else 'w') as f:
         with open(logfile, 'a') as f:
@@ -81,3 +58,21 @@ def _print_string(*args, adddate=False, **kwargs):
     else:
         return " ".join([str(i) for i in args])
 
+
+def dict2str(tmp):
+    return ', '.join("{!s}={!r}".format(k, v) for (k, v) in tmp.items())
+
+
+def print_fixed(liste, sep, width, offset=0):
+    offset = " "*offset
+    out = offset + liste[0]
+    n = len(out)
+    for i in liste[1:]:
+        if (n + len(i) + 1) > width:
+            out += sep + "\n" + offset + i
+            n = len(offset + i)
+        else:
+            out += sep + " " + i
+            n += len(i)+2
+
+    return out

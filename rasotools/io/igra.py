@@ -42,7 +42,7 @@ def open_igra(ident, variables=None, filename=None, directory=None, force_read_a
     if directory is None:
         directory = config.rasodir
 
-    if filename is None:
+    if filename is None and not force_read_ascii:
         filename = directory + '/%s/IGRAv2.nc' % ident
         message(filename, **kwargs)
 
@@ -519,6 +519,7 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
             np_src = line[46:54]
             lat = int(line[55:62])/10000.
             lon = int(line[63:71])/10000.
+
             if int(hour) == 99:
                 time = reltime + '00'
             else:

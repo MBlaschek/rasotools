@@ -4,7 +4,7 @@ import pickle
 
 import numpy as np
 import xarray as xr
-from .fun import message
+from .fun import message, dict2str
 
 __all__ = ["Radiosonde", "open_radiosonde", "load_radiosonde"]
 
@@ -217,6 +217,7 @@ class Radiosonde(object):
         import time
         from . import config
         from .io.info import view
+        from .fun import print_fixed
 
         if directory is None:
             directory = config.rasodir
@@ -226,29 +227,27 @@ class Radiosonde(object):
             summe = 0
             print("Available Files (Datasets): ")
             print(directory)
+            print('_' * 80)
             for ifile in os.listdir(directory):
                 if os.path.isdir(directory + ifile):
                     continue
 
                 current = os.path.getsize(directory + ifile) / 1024 / 1024
                 itime = time.ctime(os.path.getctime(directory + ifile))
-                print("%20s : %4d MB  : %s" % (ifile, current, itime))
+                print("%-20s : %4d MB  : %s" % (ifile, current, itime))
                 if '.nc' in ifile:
                     if varinfo:
-                        print('_' * 80)
                         with xr.open_dataset(directory + ifile) as f:
-                            print("Variables: ", ", ".join(list(f.data_vars)))
-                        print('_' * 80)
+                            print("Variables:")
+                            print(print_fixed(list(f.data_vars), ',', 80, offset=10))
                     elif ncinfo:
-                        print('_' * 80)
                         view(directory + ifile)
-                        print('_' * 80)
                     else:
                         pass
-
+                print('_' * 80)
                 summe += current
 
-            print("\n%20s : %4d MB" % ('Sum', summe))
+            print("\n%20s : %4d MB" % ('Total', summe))
         else:
             print("Store not found!")
 
@@ -279,7 +278,7 @@ class Radiosonde(object):
         if 'rasodir' in config:
             if os.path.isdir(config.rasodir):
                 directory = config.rasodir + '/' + str(self.ident) + '/'
-                message("Using", directory, **kwargs)
+                message("rasodir ", directory, **kwargs)
 
         attrs = vars(self.attrs)
 
@@ -290,19 +289,31 @@ class Radiosonde(object):
                 else:
                     ifilename = filename
 
+                # Create directory if necessary
+                if os.path.isdir(os.path.dirname(ifilename)):
+                    message("Creating directory: ", ifilename, **kwargs)
+                    os.makedirs(os.path.dirname(ifilename), exist_ok=True)  # no Errors
+
                 if force:
                     xargs['mode'] = 'w'
                     force = False
-                else:
+
+                elif os.path.isfile(ifilename):
                     xargs['mode'] = 'a'
 
-                message("Writing", ifilename, level=1, **kwargs)
+                else:
+                    xargs['mode'] = 'w'
+
+                message("Writing", ifilename, dict2str(xargs), **kwargs)
                 iobj = getattr(self.data, iname)
                 iobj.attrs.update(attrs)  # add attributes
+
+                # Xarray Object or not?
                 if hasattr(iobj, 'to_netcdf'):
                     iobj.to_netcdf(ifilename, **xargs)
                 else:
                     print("Object", iname, "has no to_netcdf", type(iobj))
+        # fin
 
     def dump(self, name=None, filename=None, directory=None, **kwargs):
         """ Pickle dump the whole radiosonde class object

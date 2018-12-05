@@ -17,12 +17,13 @@ import os as _os
 from .Radiosonde import Bunch
 from .Radiosonde import *
 from .Network import *
+from . import fun
+from . import met
 from . import io
 from . import grid
-from . import fun
 from . import bp
 from . import plot
-
+from ._ops import *
 
 def _getlibs():
     "Get library version information for printing"

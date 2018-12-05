@@ -456,52 +456,39 @@ def covariance(x, y, dim='date', period=None):
 #
 
 
-def standard_sounding_times(data, dim='date', times=[0, 12], span=12, freq='12h', **kwargs):
+def standard_sounding_times(data, dim='date', times=(0, 12), span=12, freq='12h', **kwargs):
     import numpy as np
     import pandas as pd
     from xarray import DataArray
     from ..fun import message
 
+    kwargs['mname'] = kwargs.get('mname', 'std_hours')
+
     if not isinstance(data, DataArray):
-        raise ValueError("Requires a DataArray")
+        raise ValueError('Requires a DataArray', type(data))
 
     if dim not in data.dims:
-        raise ValueError('Datetime dimension called %s?' % dim)
-    # add hour as dimension, and add hour as dimension with real times
+        raise ValueError('Requires a datetime dimension', dim)
 
-    coords = dict(data.coords)
     dates = data[dim].values.copy()
 
     #  all possible dates
-    alldates = pd.date_range(pd.Timestamp(dates.min()).replace(hour=np.min(times)),
-                             pd.Timestamp(dates.max()).replace(hour=np.max(times)), freq=freq)
+    alldates = pd.date_range(pd.Timestamp(dates.min()).replace(hour=np.min(times), minute=0, second=0),
+                             pd.Timestamp(dates.max()).replace(hour=np.max(times), minute=0, second=0), freq=freq)
 
-    message(alldates, **kwargs)
-    shape = list(data.values.shape)
-    shape[data.dims.index('date')] = alldates.size
-
-    # original time information
-    timeinfo = DataArray(np.zeros(alldates.size), coords=[alldates], dims=[dim], name='sounding_time_dev',
-                         attrs=coords[dim].attrs)
-    coords[dim] = (dim, alldates, coords[dim].attrs)
-
-    new = DataArray(np.full(tuple(shape), np.nan), coords=coords, dims=data.dims, attrs=data.attrs)
-
-    # find common
-    old_logic = np.isin(dates, new[dim].values)
+    message("New Index:", alldates, **kwargs)
+    # implicit copy
+    new = data.reindex(**{dim: alldates})  # complete reindex to new dates
+    new['delay'] = (dim, np.zeros(alldates.size))
+    # matching dates
     new_logic = np.isin(new[dim].values, dates)
-    itx = np.where(old_logic)[0]  # dates fitting newdates (indices)
-    jtx = np.where(new_logic)[0]  # newdates fitting dates (indices)
+    # not found directly
+    jtx = np.where(~new_logic)[0]  # newdates not fitting dates (indices)
+    new['delay'].values[jtx] = np.nan  # not fitting dates
+    message("Indices:", new_logic.sum(), (~new_logic).sum(), ">", alldates.size, **kwargs)
     newindex = [slice(None)] * data.ndim
     oldindex = [slice(None)] * data.ndim
-    idate = data.dims.index(dim)
-    newindex[idate] = jtx
-    oldindex[idate] = itx
-    new.values[tuple(newindex)] = data.values[tuple(oldindex)]  # transfer data of fitting dates
-
-    jtx = np.where(~new_logic)[0]  # newdates not fitting dates (indices)
-    timeinfo.values[jtx] = np.nan  # not fitting dates
-    message(" Indices: ", old_logic.sum(), new_logic.sum(), (~new_logic).sum(), **kwargs)
+    axis = data.dims.index(dim)
     nn = 0
     # All times not yet filled
     # Is there some data that fits within the given time window
@@ -513,7 +500,7 @@ def standard_sounding_times(data, dim='date', times=[0, 12], span=12, freq='12h'
             if n > 1:
                 # many choices, count data
                 k = np.where(np.abs(diff) < span)[0]
-                oldindex[idate] = k
+                oldindex[axis] = k
                 # count data of candidates
                 # weight by time difference (assuming, that a sounding at the edge of the window is less accurate)
                 distance = np.abs(diff[k])
@@ -523,21 +510,46 @@ def standard_sounding_times(data, dim='date', times=[0, 12], span=12, freq='12h'
             else:
                 j = np.argmin(np.abs(diff))  # only one choice
 
-            newindex[idate] = i
-            oldindex[idate] = j
+            newindex[axis] = i
+            oldindex[axis] = j
             new.values[tuple(newindex)] = data.values[tuple(oldindex)]  # update data array
-            timeinfo.values[i] = -1 * diff[j]  # pd.Timestamp(dates[j]).hour  # datetime of minimum
+            new['delay'].values[i] = -1 * diff[j]  # pd.Timestamp(dates[j]).hour  # datetime of minimum
             nn += 1
 
     new.attrs['std_times'] = str(times)
-    timeinfo.attrs['updated'] = nn
-    timeinfo.attrs['missing'] = timeinfo.isnull().sum().values
-    timeinfo.attrs['times'] = str(times)
-    timeinfo.attrs['ommitted'] = dates.size - old_logic.sum() - nn - timeinfo.isnull().sum().values
-    return new, timeinfo
+    new['delay'].attrs['updated'] = nn
+    new['delay'].attrs['missing'] = new['delay'].isnull().sum().values
+    new['delay'].attrs['times'] = str(times)
+    return new
 
 
-def split_by_time(data, dim='date', standardize=True, times=(0, 12), **kwargs):
+def sel_hours(data, dim='date', times=(0, 12), **kwargs):
+    """ Select hours
+
+    Args:
+        data (DataArray):
+        dim (str):
+        times (tuple, list):
+        **kwargs:
+
+    Returns:
+        DataArray
+    """
+    from ..fun import message
+    from xarray import DataArray
+
+    if not isinstance(data, DataArray):
+        raise ValueError('Requires a DataArray', type(data))
+
+    if dim not in data.dims:
+        raise ValueError('Requires a datetime dimension', dim)
+
+    kwargs['mname'] = kwargs.get('mname', 'sel_hours')
+    message('Selecting times:', times, data.shape, **kwargs)
+    return data.sel(**{dim: data[dim].dt.hour.isin(times)})  # selection
+
+
+def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False, **kwargs):
     """ Split Array into separate Arrays by time
 
     Args:
@@ -550,47 +562,61 @@ def split_by_time(data, dim='date', standardize=True, times=(0, 12), **kwargs):
     Returns:
 
     """
-    from xarray import DataArray, Dataset
+    from ..fun import message
+    from .. import array2dataset
+    from pandas import Index
+    from xarray import DataArray, concat
+
+    kwargs['mname'] = kwargs.get('mname', 'to_hours')
 
     if not isinstance(data, DataArray):
-        raise ValueError("Requires a DataArray class object (data)")
+        raise ValueError('Requires a DataArray', type(data))
+
+    if dim not in data.dims:
+        raise ValueError('Requires a datetime dimension', dim)
 
     data = data.copy()
 
     if standardize:
-        data, _ = standard_sounding_times(data, dim=dim, times=times, **kwargs)
+        data = standard_sounding_times(data, dim=dim, times=times, **kwargs)
     else:
-        data = data.sel(**{dim: data[dim].dt.hour.isin(times)})  # selection
+        data = sel_hours(data, dim=dim, times=times, **kwargs)  # selection
 
     data = dict(data.groupby(dim + '.hour'))
     for ikey in data.keys():
         idata = data.pop(ikey)
+        message(ikey, idata.shape, **kwargs)
+        # transform datetime to daily freqency
         idata[dim].values = idata[dim].to_index().to_period('D').to_timestamp().values
         data[ikey] = idata
-    return Dataset(data)
+
+    data = concat(data.values(), dim=Index(data.keys(), name='hours'))
+    if as_dataset:
+        return array2dataset(data, 'hours', rename={i: 't%02d' % i for i in times})
+    return data
 
 
-def combine_by_time(data, dim='date', variables=None, times=None, name=None, **kwargs):
+def from_hours(data, dim='date', hour='hours', **kwargs):
     import pandas as pd
-    from xarray import Dataset, concat
-    if not isinstance(data, Dataset):
-        raise ValueError('Requires a Dataset with different times')
+    from xarray import DataArray, concat
 
-    if variables is None:
-        variables = list(data.data_vars)
-    if times is None:
-        times = [ int(i) for i in list(data.data_vars)]
-    variables = dict(zip(variables, times))
-    print(variables)
+    kwargs['mname'] = kwargs.get('mname', 'from_hours')
 
-    tmp = {}
-    for ivar, ihour in variables.items():
-        if dim in data[ivar].dims:
-            tmp[ivar] = data[ivar]
-            tmp[ivar][dim].values = (tmp[ivar][dim].to_index() + pd.DateOffset(hours=ihour)).values
-    tmp = concat(tmp.values(), dim=dim)
-    tmp.name = name
-    return tmp
+    if not isinstance(data, DataArray):
+        raise ValueError('Requires a DataArray with an hour dimension', type(data))
+
+    if hour not in data.dims:
+        raise ValueError('Requires an hour dimension', hour)
+
+    if dim not in data.dims:
+        raise ValueError('Requires a datetime dimension', dim)
+
+    data = data.copy()
+    data = dict(data.groupby(hour))
+    for ikey, idata in data.items():
+        # transform datetime to daily freqency
+        idata[dim].values = (idata[dim].to_index() + pd.DateOffset(hours=int(ikey))).values
+    return concat(data.values(), dim=dim).sortby(dim)
 
 
 def day_night_departures(data, dim='date', standardize=True, **kwargs):
@@ -605,25 +631,24 @@ def day_night_departures(data, dim='date', standardize=True, **kwargs):
     Returns:
 
     """
-    from xarray import DataArray
+    from ..fun import message
+    from xarray import DataArray, set_options
+
+    kwargs['mname'] = kwargs.get('mname', 'dn_dep')
 
     if not isinstance(data, DataArray):
-        raise ValueError("Requires a DataArray class object (data)")
+        raise ValueError('Requires a DataArray', type(data))
 
-    data = data.copy()
+    if dim not in data.dims:
+        raise ValueError('Requires a datetime dimension', dim)
 
-    if standardize:
-        data, _ = standard_sounding_times(data, dim=dim, times=[0, 12], **kwargs)
-
-    data = dict(data.groupby(dim + '.hour'))
-    for ikey in data.keys():
-        idata = data.pop(ikey)
-        idata[dim].values = idata[dim].to_index().to_period('D').to_timestamp().values
-        data[ikey] = idata
-
-    attrs = data[0].attrs.copy()
-    data = data[12] - data[0]
+    data = to_hours(data, dim=dim, standardize=standardize, times=[0, 12], **kwargs)
+    attrs = data.attrs.copy()
+    name = data.name
+    data = data.sel(hours=12) - data.sel(hours=0)
+    data.name = name + '_dep'
     data.attrs.update(attrs)
     data.attrs['standard_name'] += '_day_night_dep'
     data.attrs['cell_method'] = 'noon - night'
     return data
+

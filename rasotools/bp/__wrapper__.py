@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 from xarray import Dataset, DataArray, set_options
-from ..fun import message, dict2str
+from ..fun import message, dict2str, kwu
 
-__all__ = ['apply_threshold', 'snht', 'adjustments', 'any_breakpoints', 'breakpoint_statistics', 'get_breakpoints']
+__all__ = ['apply_threshold', 'snht', 'adjust_mean', 'adjust_quantiles', 'adjust_quantiles_era',
+           'breakpoint_statistics', 'get_breakpoints', 'breakpoint_data']
 
 
 def snht(data, dim='date', var=None, dep=None, suffix=None, window=1460, missing=600, **kwargs):
@@ -88,17 +89,6 @@ def snht(data, dim='date', var=None, dep=None, suffix=None, window=1460, missing
     return data
 
 
-def combine_breakpoints(data, dim='date', var=None, **kwargs):
-    #
-    # use snht break points
-    # use sonde type changes
-    # use documentation changes
-    # use radiosonde intercomparison data to adjust radiosonde types?
-    # how to weight these changes
-    # probability of a breakpoint ?
-    pass
-
-
 def apply_threshold(data, dim='date', var=None, name='breaks', suffix=None, thres=50, dist=730, min_levels=3,
                     ensemble=False, **kwargs):
     """ Apply threshold on SNHT to detect breakpoints
@@ -166,17 +156,18 @@ def apply_threshold(data, dim='date', var=None, name='breaks', suffix=None, thre
     return data
 
 
-def any_breakpoints(data, dim='date', var=None, **kwargs):
+def get_breakpoints(data, value=2, dim='date', var=None, return_startstop=False, startstop_min=0, **kwargs):
     """ Check if there are any breakpoints
 
     Args:
         data (DataArray): input data
+        value (int): breakpoint indicator value
         dim (str): datetime dim
         var (str): variable
         **kwargs:
 
     Returns:
-        bool : breakpoints yes/no
+        list : breakpoints
     """
     if not isinstance(data, (DataArray, Dataset)):
         raise ValueError("Require a DataArray / Dataset object")
@@ -191,48 +182,182 @@ def any_breakpoints(data, dim='date', var=None, **kwargs):
     if dim not in idata.dims:
         raise ValueError("Requires a datetime dimension", idata.dims)
 
-    i, d, n = get_breakpoints(idata, dim=dim, dates=True, nlevs=True)
+    axis = idata.dims.index(dim)
+    tmp = np.where(idata.values == value)
+    i = list(map(int, np.unique(tmp[axis])))
+    dates = np.datetime_as_string(idata[dim].values, unit='D')
+    e = []
+    s = []
+    summe = idata.values.sum(axis=1 if axis == 0 else 0)
+    for k in i:
+        l = np.where(summe[:k][::-1] <= startstop_min)[0][0]
+        m = np.where(summe[k:] <= startstop_min)[0][0]
+        e += [k - l]
+        s += [k + m]
 
-    if len(i) > 0:
-        message("[%8s] [%27s]    [#]" % ('idx', 'date'), **kwargs)
-        message("\n".join(["[%8s] %s L: %3d" % (j, k, l) for j, k, l in zip(i, d, n)]), **kwargs)
-        return True
+    if kwargs.get('verbose', 0) > 0:
+        if len(i) > 0:
+            message("Breakpoints for ", idata.name, **kwargs)
+            message("[%8s] [%8s] [%8s] [%8s] [ #]" % ('idx', 'end', 'peak', 'start'), **kwargs)
+            message("\n".join(
+                ["[%8s] %s %s %s %4d" % (j, dates[l], dates[j], dates[k], k - l) for j, k, l in zip(i, s, e)]),
+                **kwargs)
+    if return_startstop:
+        return i, e, s
+    return i
 
-    message("No breakpoints", **kwargs)
-    return False
+
+def adjust_mean(data, name, breakname, dim='date', dep_var=None, suffix='_m', **kwargs):
+    """Detect and Correct Radiosonde biases from Departure Statistics
+Use ERA-Interim departures to detect breakpoints and
+adjustments these with a mean  adjustment going back in time.
 
 
-"""Detect and Correct Radiosonde biases from Departure Statistics
+    Args:
+        data (Dataset): Input Dataset with different variables
+        name (str): Name of variable to adjust
+        breakname (str): Name of variable with breakpoint information
+        dim (str): datetime dimension
+        dep_var (str): Name of variable to use as a departure
+        suffix (str): add to name of new variables
+
+    Optional Args:
+        sample_size (int):  minimum Sample size [130]
+        borders (int):  biased sample before and after a break [None]
+        bounded (tuple):  limit correction to bounds
+        recent (bool):  Use all recent Data to adjustments
+        ratio (bool):  Use ratio instead of differences
+
+    Returns:
+        Dataset
+    """
+    from . import adj
+    if not isinstance(data, Dataset):
+        raise ValueError("Requires a Dataset object", type(data))
+
+    if not isinstance(name, str):
+        raise ValueError("Requires a string name", type(name))
+
+    if name not in data.data_vars:
+        raise ValueError("data var not present")
+
+    if breakname not in data.data_vars:
+        raise ValueError("requires a breaks data var")
+
+    idata = data[name].copy()
+
+    if dep_var is not None:
+        if dep_var not in data.data_vars:
+            raise ValueError("dep var not present", data.data_vars)
+
+        with set_options(keep_attrs=True):
+            idata = (idata - data[dep_var].reindex_like(idata))
+
+    values = idata.values
+    breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
+    axis = idata.dims.index(dim)
+    params = idata.attrs.copy()  # deprecated (xr-patch)
+
+    message(name, str(values.shape), 'A:', axis, "Dep:", str(dep_var), **kwargs)
+
+    params.update({'sample_size': kwargs.get('sample_size', 730),
+                   'borders': kwargs.get('borders', 180),
+                   'bounded': str(kwargs.get('bounded', '')),
+                   'recent': int(kwargs.get('recent', False)),
+                   'ratio': int(kwargs.get('ratio', True))})
+
+    message(dict2str(params), **kwu('level', 1, **kwargs))
+    stdn = data[name].attrs.get('standard_name', name)
+
+    data[name + suffix] = (idata.dims, adj.mean(values, breaks, axis=axis, **kwargs))
+    data[name + suffix].attrs.update(params)
+    data[name + suffix].attrs['biascor'] = 'mean'
+    if 'niter' in data[name + suffix].attrs:
+        data[name + suffix].attrs['niter'] += 1
+    else:
+        data[name + suffix].attrs['niter'] = 1
+        data[name + suffix].attrs['standard_name'] = stdn + '_mean_adj'
+
+    return data
+
+
+def adjust_quantiles(data, name, breakname, dim='date', dep_var=None, suffix='_q', quantilen=None, **kwargs):
+    """Detect and Correct Radiosonde biases from Departure Statistics
 Use ERA-Interim departures to detect breakpoints and
 adjustments these with a mean and a quantile adjustment going back in time.
 
-uses raso.timeseries.bp.analyse / correction
 
-Args:
-    data         (DataArray) :  input data
-    bdata        (DataArray) :  input data breakpoints
-    dep_var      (str)       :  calculate departure from that variable
-    mean_cor     (bool)      :  calc. mean adjustments
-    quantile_cor (bool)      :  cacl. quantile adjustments
-    quantile_adj (bool)      :  cacl. quantile adjustments from that variable
-    quantilen    (list)      :  percentiles
+    Args:
+        data (Dataset): Input Dataset with different variables
+        name (str): Name of variable to adjust
+        breakname (str): Name of variable with breakpoint information
+        dim (str): datetime dimension
+        dep_var (str): Name of variable to use as a departure
+        suffix (str): add to name of new variables
+        quantilen (list): quantiles for quantile_cor
 
-Keyword Args:
-    sample_size (int)   :  minimum Sample size [130]
-    borders     (int)   :  biased sample before and after a break [None]
-    bounded     (tuple) :  limit correction to bounds
-    recent      (bool)  :  Use all recent Data to adjustments
-    ratio       (bool)  :  Use ratio instead of differences
-    ref_period  (slice) :  Reference period for quantile_adj
-    adjust_reference (bool) : adjust reference for quantile_adj
+    Optional Args:
+        sample_size (int):  minimum Sample size [130]
+        borders (int):  biased sample before and after a break [None]
+        bounded (tuple):  limit correction to bounds
+        recent (bool):  Use all recent Data to adjustments
+        ratio (bool):  Use ratio instead of differences
 
-Returns:
-    bool, DataArray, ... :
-"""
+    Returns:
+        Dataset
+    """
+    from . import adj
+    if not isinstance(data, Dataset):
+        raise ValueError("Requires a Dataset object", type(data))
+
+    if not isinstance(name, str):
+        raise ValueError("Requires a string name", type(name))
+
+    if name not in data.data_vars:
+        raise ValueError("data var not present")
+
+    if breakname not in data.data_vars:
+        raise ValueError("requires a breaks data var")
+
+    idata = data[name].copy()
+
+    if dep_var is not None:
+        if dep_var not in data.data_vars:
+            raise ValueError("dep var not present", data.data_vars)
+
+        with set_options(keep_attrs=True):
+            idata = (idata - data[dep_var].reindex_like(idata))
+
+    if quantilen is None:
+        quantilen = np.arange(0, 101, 10)
+
+    values = idata.values
+    breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
+    axis = idata.dims.index(dim)
+    params = idata.attrs.copy()  # deprecated (xr-patch)
+
+    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(quantilen), "Dep:", str(dep_var), **kwargs)
+
+    params.update({'sample_size': kwargs.get('sample_size', 730),
+                   'borders': kwargs.get('borders', 180),
+                   'bounded': str(kwargs.get('bounded', '')),
+                   'recent': int(kwargs.get('recent', False)),
+                   'ratio': int(kwargs.get('ratio', True))})
+
+    message(dict2str(params), **kwu('level', 1, **kwargs))
+    stdn = data[name].attrs.get('standard_name', name)
+
+    data[name + suffix] = (
+        idata.dims, adj.quantile(values, breaks, axis=axis, quantilen=quantilen, **kwargs))
+    data[name + suffix].attrs.update(params)
+    data[name + suffix].attrs['biascor'] = 'quantil'
+    data[name + suffix].attrs['standard_name'] = stdn + '_quantil_adj'
+
+    return data
 
 
-def adjustments(data, name, breakname, dim='date', dep_var=None, suffix=None, mean_cor=True, quantile_cor=True,
-                quantile_adj=None, quantilen=None, **kwargs):
+def adjust_quantiles_era(data, name, breakname, dim='date', dep_var=None, suffix=None, mean_cor=True, quantile_cor=True,
+                         quantile_adj=None, quantilen=None, **kwargs):
     """Detect and Correct Radiosonde biases from Departure Statistics
 Use ERA-Interim departures to detect breakpoints and
 adjustments these with a mean and a quantile adjustment going back in time.
@@ -296,42 +421,40 @@ adjustments these with a mean and a quantile adjustment going back in time.
         if quantile_adj not in data.data_vars:
             raise ValueError("quantile_adj var not present", data.data_vars)
 
-        adj = data[quantile_adj].reindex_like(idata)
-        # if dep_var is not None:
-        #     with set_options(keep_attrs=True):
-        #         adj = adj - data[dep_var].reindex_like(idata)  # Make sure it's the same space
+        qadj = data[quantile_adj].reindex_like(idata)
 
     values = idata.values
+    breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
     axis = idata.dims.index(dim)
     params = idata.attrs.copy()  # deprecated (xr-patch)
-    ibreaks = get_breakpoints(data[breakname], dim=dim)  # just indices
-    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(quantilen), "Dep:", str(dep_var), "Adj:", str(quantile_adj),
-            '#B:', len(ibreaks), **kwargs)
+
+    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(quantilen), "Dep:", str(dep_var), "Adj:",
+            str(quantile_adj), **kwargs)
 
     params.update({'sample_size': kwargs.get('sample_size', 730),
                    'borders': kwargs.get('borders', 180),
                    'bounded': str(kwargs.get('bounded', '')),
-                   'recent': kwargs.get('recent', False),
-                   'ratio': kwargs.get('ratio', True)})
+                   'recent': int(kwargs.get('recent', False)),
+                   'ratio': int(kwargs.get('ratio', True))})
 
-    message(dict2str(params), level=1, **kwargs)
+    message(dict2str(params), **kwu('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
 
     if mean_cor:
-        data[name + '_m' + suffix] = (idata.dims, adj.mean(values, ibreaks, axis=axis, **kwargs))
+        data[name + '_m' + suffix] = (idata.dims, adj.mean(values, breaks, axis=axis, **kwargs))
         data[name + '_m' + suffix].attrs.update(params)
         data[name + '_m' + suffix].attrs['biascor'] = 'mean'
         data[name + '_m' + suffix].attrs['standard_name'] = stdn + '_mean_adj'
 
     if quantile_cor:
         data[name + '_q' + suffix] = (
-        idata.dims, adj.quantile(values, ibreaks, axis=axis, quantilen=quantilen, **kwargs))
+            idata.dims, adj.quantile(values, breaks, axis=axis, quantilen=quantilen, **kwargs))
         data[name + '_q' + suffix].attrs.update(params)
         data[name + '_q' + suffix].attrs['biascor'] = 'quantil'
         data[name + '_q' + suffix].attrs['standard_name'] = stdn + '_quantil_adj'
 
     if quantile_adj is not None:
-        qe_adj, qa_adj = adj.quantile_reference(values, adj.values, ibreaks, axis=axis, quantilen=quantilen,
+        qe_adj, qa_adj = adj.quantile_reference(values, qadj.values, breaks, axis=axis, quantilen=quantilen,
                                                 **kwargs)
         data[name + '_qe' + suffix] = (idata.dims, qe_adj)
         data[name + '_qe' + suffix].attrs.update(params)
@@ -444,8 +567,81 @@ def correct_2var(xdata, ydata):
     pass
 
 
+def breakpoint_data(data, a, b, c, dim='date', borders=0, sample_size=130, max_sample=1460, recent=False,
+                    return_indices=False, **kwargs):
+    """ Get Data before and after a breakpoint (index)
+
+    Args:
+        data (DataArray): Input data
+        a (int): index earlier than breakpoint
+        b (int): index of breakpoint
+        c (int): index later than breakpoint
+        dim (str): datetime dimension
+        borders (int): borders around breakpoint to ignore
+        sample_size (int): minimum sample size for stats
+        max_sample (int): maxmimum sample size for stats
+        recent (bool): don't use c
+        return_indices (bool): return indices instead of data
+        **kwargs:
+
+    Returns:
+        DataArray, DataArray DataArray: Before (min, max), Before (all), After Data
+        or
+        tuple, tuple : Before, Before, After Indices
+    """
+    from .adj import idx2shp
+    if not isinstance(data, DataArray):
+        raise ValueError()
+
+    axis = data.dims.index(dim)
+    dshape = data.values.shape
+    ibiased = slice(a, b)
+    isample = slice(b, c)
+    if (b - a) - borders > sample_size:
+        # [ - ; -borders]
+        isample = slice(a, b - borders)
+        ibiased = slice(a, b - borders)
+        if (b - a) - 2 * borders > sample_size:
+            # [ +borders ; -borders ]
+            isample = slice(a + borders, b - borders)
+            if (b - a) - 2 * borders > max_sample:
+                # [ -max_sample ; -borders]
+                isample = slice(b - borders - max_sample, b - borders)
+                message("A [%d - %d - %d = %d - %d - %d = %d]" % (
+                b, borders, max_sample, isample.start, b, borders, isample.stop), **kwu('level',1, **kwargs))
+
+    if (c - b) - borders > sample_size:
+        iref = slice(b + borders, c)
+        if (c - b) - borders > max_sample and not recent:
+            iref = slice(b + borders, b + borders + max_sample)
+    else:
+        iref = slice(b, c)
+
+    ibiased = idx2shp(ibiased, axis, dshape)
+    isample = idx2shp(isample, axis, dshape)
+    iref = idx2shp(iref, axis, dshape)
+    if return_indices:
+        return isample, ibiased, iref
+    return data[isample], data[ibiased], data[iref]
+
+
 def breakpoint_statistics(data, breakname, dim='date', agg='mean', borders=None, inbetween=True, max_sample=None,
                           **kwargs):
+    """
+
+    Args:
+        data:
+        breakname:
+        dim:
+        agg:
+        borders:
+        inbetween:
+        max_sample:
+        **kwargs:
+
+    Returns:
+
+    """
     if not isinstance(data, Dataset):
         raise ValueError("Requires a Dataset class object")
 
@@ -459,11 +655,11 @@ def breakpoint_statistics(data, breakname, dim='date', agg='mean', borders=None,
         raise ValueError("agg not found", agg)
 
     data = data.copy()
-    ibreaks = get_breakpoints(data[breakname], dim=dim)
+    ibreaks = get_breakpoints(data[breakname], 2, dim=dim)
 
     nb = len(ibreaks)
     if nb == 0:
-        message("Warning no Breakpoints found", level=0, **kwargs)
+        message("Warning no Breakpoints found", **kwu('level',0, **kwargs))  # Always print
         return
 
     if borders is None:
@@ -565,37 +761,3 @@ def reference_period(data, dim='date', dep_var=None, period=None, **kwargs):
     # find best matching period (lowest differences)
     #
     return None
-
-
-def get_breakpoints(data, dim='date', sign=1, dates=False, nlevs=False):
-    """ Get breakpoint datetime indices from Breakpoint DataArray
-
-    Args:
-        data (DataArray): input data
-        dim (str): datetime dimension
-        sign (int): threshold value
-        dates (bool): return dates
-        nlevs (bool): return levels
-
-    Returns:
-        list
-
-    """
-    from xarray import DataArray
-    if not isinstance(data, DataArray):
-        raise ValueError('Requires a DataArray', type(data))
-
-    if dim not in data.dims:
-        raise ValueError('Requires a datetime dimension', dim)
-
-    t = np.where(data.values >= sign)
-    axis = data.dims.index(dim)
-    indices = list(map(int, np.unique(t[axis])))
-
-    if dates and nlevs:
-        return indices, data[dim].values[indices], [(data.values[i] > 1).sum(axis=axis) for i in indices]
-
-    if dates:
-        return indices, data[dim].values[indices]
-
-    return indices

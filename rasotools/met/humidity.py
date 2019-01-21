@@ -196,7 +196,7 @@ def compare_dewpoints():
     data = reference_table()
 
     methods = ['dewpoint_Bolton', 'dewpoint_Boegel', 'dewpoint_AlduchovEskridge',
-               'dewpoint_Sonntag', 'dewpoint_Magnus', 'dewpoint_ECMWF', 'dewpoint_JMA',
+               'dewpoint_Sonntag', 'dewpoint_Magnus', 'dewpoint_ecmwf', 'dewpoint_JMA',
                'dewpoint_newton', 'dewpoint_minimize']
 
     for im in methods:
@@ -214,7 +214,7 @@ def compare_dewpoints():
 def performance_dewpoints(esat=None):
     import timeit
     methods = ['dewpoint_Bolton', 'dewpoint_Boegel', 'dewpoint_AlduchovEskridge',
-               'dewpoint_Sonntag', 'dewpoint_Magnus', 'dewpoint_ECMWF', 'dewpoint_JMA',
+               'dewpoint_Sonntag', 'dewpoint_Magnus', 'dewpoint_ecmwf', 'dewpoint_JMA',
                'dewpoint_newton', 'dewpoint_minimize']
 
     for im in methods:
@@ -334,7 +334,7 @@ def dewpoint_ECMWF(e, t=None, rh=None, **kwargs):
     TEMP observations, with a further transformation of RH into specific humidity (Q)
     for TEMP observations.
 
-    Uses FOEEWMO for water only saturation water vapor pressure
+    Uses foeewmo for water only saturation water vapor pressure
 
     Parameters
     ----------
@@ -349,7 +349,7 @@ def dewpoint_ECMWF(e, t=None, rh=None, **kwargs):
         if rh is None:
             raise ValueError('requires t and rh or e')
 
-        e = svp(t, method='FOEEWMO') * rh
+        e = svp(t, method='foeewmo') * rh
 
     lnpart = np.log(e / 611.21)
     return (17.502 * 273.16 - 32.19 * lnpart) / (17.502 - lnpart)

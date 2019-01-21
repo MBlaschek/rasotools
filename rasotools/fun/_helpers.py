@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed']
+__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'kwc', 'kwu']
 
 
 def now():
@@ -64,7 +64,7 @@ def dict2str(tmp):
 
 
 def print_fixed(liste, sep, width, offset=0):
-    offset = " "*offset
+    offset = " " * offset
     out = offset + liste[0]
     n = len(out)
     for i in liste[1:]:
@@ -73,6 +73,17 @@ def print_fixed(liste, sep, width, offset=0):
             n = len(offset + i)
         else:
             out += sep + " " + i
-            n += len(i)+2
+            n += len(i) + 2
 
     return out
+
+
+def kwc(name, value=None, **kwargs):
+    if value is None:
+        return name in kwargs.keys()
+    return kwargs.get(name, None) == value
+
+
+def kwu(name, value, **kwargs):
+    kwargs.update({name: value})
+    return kwargs

@@ -235,7 +235,7 @@ def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, method='Hyl
     if rel_humi is not None:
         # RH to VP to DPD
         # if 'ECMWF' in method:
-        #     dpdvar.values = temp.values - dewpoint_ECMWF(temp.values, rel_humi.values)
+        #     dpdvar.values = temp.values - dewpoint_ecmwf(temp.values, rel_humi.values)
         # else:
         vpdata = rel_humi.values * svp(temp.values, method=method, **kwargs)
         dpdvar.values = temp.values - dewpoint(vpdata, method=method, **kwargs)
@@ -570,7 +570,18 @@ def total_precipitable_water(data, levels=None, min_levels=8, fill_nan=True, met
     return data
 
 
-def vertical_interpolation(data, dim, levels=None, min_levels=3, **kwargs):
+def vertical_interpolation(data, dim, levels=None, **kwargs):
+    """ Apply a vertical log-pressure interpolation, no extrapolation
+
+    Args:
+        data (DataArray): input data
+        dim (str): vertical (pressure) coordinate
+        levels (list, ndarray): new vertical levels
+        **kwargs:
+
+    Returns:
+        DataArray : interpolated Array
+    """
     from xarray import DataArray
     import numpy as np
     from ..fun.interp import profile
@@ -585,12 +596,12 @@ def vertical_interpolation(data, dim, levels=None, min_levels=3, **kwargs):
     if levels is None:
         levels = config.std_plevels
 
-    coords = dict(data.coords)
+    data = data.copy()
     axis = data.dims.index(dim)
-    pin = data.dims[dim].values
-    values = np.apply_along_axis(profile, axis, data.values, pin, levels, min_levels=min_levels)
-    coords[dim] = (dim, levels, data[dim].attrs)   # modify dimension
-    data = DataArray(name=data.name, data=values, coords=coords, dims=data.dims, attrs=data.attrs)
+    pin = data[dim].values
+    values = np.apply_along_axis(profile, axis, data.values, pin, levels)
+    data = data.reindex({dim:levels})
+    data.values = values
     cmethod = "%s: intp(%d > %d)" % (dim, len(pin), len(levels))
     if 'cell_method' in data.attrs:
         data.attrs['cell_method'] = cmethod + data.attrs['cell_method']

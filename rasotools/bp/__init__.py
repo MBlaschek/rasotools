@@ -17,11 +17,10 @@ Structure
 --- quantile_era_ratio (x, y, sample1, meinequantilen, sample_size, verbose=0)
 """
 
-# import detect
-# import dep
-# import adj
-# from support import *
-
+from . import det
+from . import dep
+from . import adj
+from . import meta
 # from quantile_count import quantile_count
 # from quantiles_at_breakpoint import quantiles_at_breakpoint
 

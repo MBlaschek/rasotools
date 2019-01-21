@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 import numpy as np
+from ..fun import nanfunc
 
 __all__ = ['mean', 'quantile']
 
 
-def mean(data, sample1, sample2, sampleout=None, axis=0, sample_size=130, bounded=None, ratio=True,
+def mean(data, sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, bounded=None, ratio=True,
          median=False, **kwargs):
     """ Adjustment method using mean differences or ratios
 
@@ -16,9 +17,8 @@ def mean(data, sample1, sample2, sampleout=None, axis=0, sample_size=130, bounde
 
     Args:
         data (np.ndarray): input data
-        sample1 (list, slice): slice reference
-        sample2 (list, slice): slice sample
-        sampleout (list, slice): slice output sample
+        sample1 (tuple, slice): slice reference
+        sample2 (tuple, slice): slice sample
         axis (int): date axis
         sample_size (int): minimum sample size
         bounded (tuple): allowed variable range
@@ -33,36 +33,73 @@ def mean(data, sample1, sample2, sampleout=None, axis=0, sample_size=130, bounde
     if bounded is not None:
         lbound, ubound = bounded
 
-    if sampleout is None:
-        sampleout = sample2
-
+    # minimum sample size, maximum sample size
     if median:
-        sample1 = nanmedian(data[sample1], axis=axis, n=sample_size)
-        sample2 = nanmedian(data[sample2], axis=axis, n=sample_size)
+        s1 = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmedian, borders=borders)
+        s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmedian, borders=borders)
     else:
-        sample1 = nanmean(data[sample1], axis=axis, n=sample_size)
-        sample2 = nanmean(data[sample2], axis=axis, n=sample_size)
-
-    if bounded is not None:
-        tmp = data[sampleout].copy()
+        s1 = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders)
+        s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders)
 
     if ratio:
-        dep = sample1 / sample2
+        # Todo factor amplifies extreme values
+        dep = s1 / s2
         dep = np.where(np.isfinite(dep), dep, 1.)  # replace NaN with 1
-        sampleout = data[sampleout] * dep
+        sampleout = data[sample2] * dep
     else:
-        dep = sample1 - sample2
-        sampleout = data[sampleout] + dep
+        dep = s1 - s2
+        sampleout = data[sample2] + dep
 
     if bounded is not None:
         with np.errstate(invalid='ignore'):
-            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), tmp, sampleout)
+            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), data[sample2], sampleout)
 
     return sampleout
 
 
-def quantile(data, sample1, sample2, quantiles, sampleout=None, axis=0, sample_size=130, bounded=None, ratio=True,
-             **kwargs):
+def meanvar(data, sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, bounded=None, **kwargs):
+    """ Adjustment method using mean differences or ratios
+
+    data[sampleout]  + (MEAN(data[sample1]) - MEAN(data[sample2]))
+
+    Args:
+        data (np.ndarray): input data
+        sample1 (tuple, slice): slice reference
+        sample2 (tuple, slice): slice sample
+        sampleout (tuple, slice): slice output sample
+        axis (int): date axis
+        sample_size (int): minimum sample size
+        bounded (tuple): allowed variable range
+
+    Returns:
+        np.ndarray : mean adjusted data
+    """
+
+    lbound, ubound = None, None
+    if bounded is not None:
+        lbound, ubound = bounded
+
+    s1 = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders)
+    s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders)
+    s1v = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanvar, borders=borders)
+    s2v = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanvar, borders=borders)
+
+    # MEAN
+    dep = s1 - s2
+    sampleout = data[sample2] + dep
+    # VAR
+    dep = np.divide(s1v, s2v, out=np.ones(s2v.shape), where=s2v != 0)
+    sampleout = data[sampleout] * dep
+
+    if bounded is not None:
+        with np.errstate(invalid='ignore'):
+            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), data[sample2], sampleout)
+
+    return sampleout
+
+
+def quantile(data, sample1, sample2, quantiles, axis=0, sample_size=130, borders=0, max_sample=1460, bounded=None,
+             ratio=True, **kwargs):
     """ Adjustment method using quantile differences or ratios
 
     ratio=False
@@ -73,10 +110,10 @@ def quantile(data, sample1, sample2, quantiles, sampleout=None, axis=0, sample_s
 
     Args:
         data (np.ndarray): input data
-        sample1 (list): slice reference
-        sample2 (list): slice sample
+        sample1 (tuple, slice): slice reference
+        sample2 (tuple, slice): slice sample
         quantiles (list): percentiles to use
-        sampleout (list): slice output sample
+        sampleout (tuple, slice): slice output sample
         axis (int): date axis
         sample_size (int): minimum sample size
         bounded (tuple): allowed variable range
@@ -89,9 +126,6 @@ def quantile(data, sample1, sample2, quantiles, sampleout=None, axis=0, sample_s
     if bounded is not None:
         lbound, ubound = bounded
 
-    if sampleout is None:
-        sampleout = sample2
-
     # Add 0 and 100, and remove them
     quantiles = np.unique(np.concatenate([[0], quantiles, [100]]))
     quantiles = quantiles[1:-1]  # remove 0 and 100
@@ -101,37 +135,34 @@ def quantile(data, sample1, sample2, quantiles, sampleout=None, axis=0, sample_s
     nsample2 = np.isfinite(data[sample2]).sum(axis=axis) > sample_size
 
     # Percentiles of the samples
-    sample1 = np.nanpercentile(data[sample1], quantiles, axis=axis)
-    sample2 = np.nanpercentile(data[sample2], quantiles, axis=axis)
-
-    sampleout = data[sampleout]
-    if bounded is not None:
-        tmp = sampleout.copy()
+    s1 = np.nanpercentile(data[sample1], quantiles, axis=axis)
+    s2 = np.nanpercentile(data[sample2], quantiles, axis=axis)
 
     if ratio:
-        dep = np.where(sample2 != 0., sample1 / sample2, 1.)
+        # dep = np.where(sample2 != 0., sample1 / sample2, 1.)
+        dep = np.divide(s1, s2, where=(s2 != 0), out=np.full(s2.shape, 1.))
         dep = np.where(nsample1 & nsample2, dep, 1.)  # apply sample size
         dep = np.where(np.isfinite(dep), dep, 1.)  # replace NaN
     else:
-        dep = sample1 - sample2
+        dep = s1 - s2
         dep = np.where(nsample1 & nsample2, dep, 0.)  # apply sample size
 
     # Interpolate adjustments to sampleout shape and data
-    dep = apply_quantile_adjustments(sampleout, sample2, dep, axis=axis)
+    dep = apply_quantile_adjustments(data[sample2], s2, dep, axis=axis)
 
     if ratio:
-        sampleout = sampleout * dep
+        sampleout = data[sample2] * dep
     else:
-        sampleout = sampleout + dep
+        sampleout = data[sample2] + dep
 
     if bounded is not None:
         with np.errstate(invalid='ignore'):
-            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), tmp, sampleout)
+            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), data[sample2], sampleout)
 
     return sampleout
 
 
-def quantile_reference(xdata, ydata, sample1, sample2, quantiles, sampleout=None, axis=0, sample_size=130, bounded=None,
+def quantile_reference(xdata, ydata, sample1, sample2, quantiles, axis=0, sample_size=130, max_sample=1460, borders=0, bounded=None,
                        ratio=True, **kwargs):
     """ Adjustment method using quantile differences or ratios
 
@@ -147,7 +178,6 @@ def quantile_reference(xdata, ydata, sample1, sample2, quantiles, sampleout=None
         sample1 (list, slice): slice reference
         sample2 (list, slice): slice sample
         quantiles (list): percentiles to use
-        sampleout (list, slice): slice output sample
         axis (int): date axis
         sample_size (int): minimum sample size
         bounded (tuple): allowed variable range
@@ -160,9 +190,6 @@ def quantile_reference(xdata, ydata, sample1, sample2, quantiles, sampleout=None
     if bounded is not None:
         lbound, ubound = bounded
 
-    if sampleout is None:
-        sampleout = sample2
-
     # Add 0 and 100, and remove them
     quantiles = np.unique(np.concatenate([[0], quantiles, [100]]))
     quantiles = quantiles[1:-1]  # remove 0 and 100
@@ -172,32 +199,29 @@ def quantile_reference(xdata, ydata, sample1, sample2, quantiles, sampleout=None
     nsample2 = np.isfinite(ydata[sample2]).sum(axis=axis) > sample_size
 
     # Percentiles of the samples
-    sample1 = np.nanpercentile(xdata[sample1], quantiles, axis=axis)
-    sample2 = np.nanpercentile(ydata[sample2], quantiles, axis=axis)
-
-    sampleout = xdata[sampleout]
-    if bounded is not None:
-        tmp = sampleout.copy()
+    s1 = np.nanpercentile(xdata[sample1], quantiles, axis=axis)
+    s2 = np.nanpercentile(ydata[sample2], quantiles, axis=axis)
 
     if ratio:
-        dep = np.where(sample2 != 0., sample1 / sample2, 1.)
+        # dep = np.where(sample2 != 0., sample1 / sample2, 1.)
+        dep = np.divide(s1, s2, where=(s2 != 0), out=np.full(s2.shape, 1.))
         dep = np.where(nsample1 & nsample2, dep, 1.)  # apply sample size
         dep = np.where(np.isfinite(dep), dep, 1.)  # replace NaN
     else:
-        dep = sample1 - sample2
+        dep = s1 - s2
         dep = np.where(nsample1 & nsample2, dep, 0.)  # apply sample size
 
     # Interpolate adjustments to sampleout shape and data
-    dep = apply_quantile_adjustments(sampleout, sample2, dep, axis=axis)
+    dep = apply_quantile_adjustments(xdata[sample2], s2, dep, axis=axis)
 
     if ratio:
-        sampleout = sampleout * dep
+        sampleout = xdata[sample2] * dep
     else:
-        sampleout = sampleout + dep
+        sampleout = xdata[sample2] + dep
 
     if bounded is not None:
         with np.errstate(invalid='ignore'):
-            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), tmp, sampleout)
+            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), xdata[sample2], sampleout)
 
     return sampleout
 
@@ -205,39 +229,6 @@ def quantile_reference(xdata, ydata, sample1, sample2, quantiles, sampleout=None
 #
 # Helper functions
 #
-
-
-def nanmean(data, n=130, axis=0):
-    """ Nan omitting Mean
-
-    Args:
-        data (np.ndarray): data including NaN
-        n (int): minimum sample size
-        axis (int): datetime axis
-
-    Returns:
-        np.ndarray : mean values at axis
-    """
-    nn = np.isfinite(data).sum(axis=axis)
-    nn = np.where(nn < n, np.nan, nn)
-    return np.nansum(data, axis=axis) / nn
-
-
-def nanmedian(data, n=130, axis=0):
-    """ Nan omitting Median
-
-    Args:
-        data (np.ndarray): data including NaN
-        n (int): minimum sample size
-        axis (int): datetime axis
-
-    Returns:
-        np.ndarray : median values at axis
-    """
-    nn = np.isfinite(data).sum(axis=axis)
-    nn = np.where(nn < n, np.nan, 1.)
-    return np.nanmedian(data, axis=axis) * nn
-
 
 def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
     """ Helper Function for applying quantile adjustments

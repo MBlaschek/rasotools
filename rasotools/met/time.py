@@ -3,6 +3,11 @@
 
 __all__ = ['anomaly', 'trend', 'trend_per_month', 'trend_mon_percentile',
            'day_night_departures', 'correlate', 'covariance']
+#
+# global Variables
+#
+month_to_season = {1: 'DJF', 2: 'DJF', 3: 'MAM', 4: 'MAM', 5: 'MAM', 6: 'JJA', 7: 'JJA', 8: 'JJA', 9: 'SON',
+                   10: 'SON', 11: 'SON', 12: 'DJF'}
 
 
 #
@@ -562,8 +567,7 @@ def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False
     Returns:
 
     """
-    from ..fun import message
-    from .. import array2dataset
+    from ..fun import message, array2dataset, kwu
     from pandas import Index
     from xarray import DataArray, concat
 
@@ -578,14 +582,14 @@ def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False
     data = data.copy()
 
     if standardize:
-        data = standard_sounding_times(data, dim=dim, times=times, **kwargs)
+        data = standard_sounding_times(data, dim=dim, times=times, **kwu('level', 1, **kwargs))
     else:
-        data = sel_hours(data, dim=dim, times=times, **kwargs)  # selection
+        data = sel_hours(data, dim=dim, times=times, **kwu('level', 1, **kwargs))  # selection
 
     data = dict(data.groupby(dim + '.hour'))
     for ikey in data.keys():
         idata = data.pop(ikey)
-        message(ikey, idata.shape, **kwargs)
+        message(idata.name, ikey, idata.shape, **kwargs)
         # transform datetime to daily freqency
         idata[dim].values = idata[dim].to_index().to_period('D').to_timestamp().values
         data[ikey] = idata
@@ -597,6 +601,17 @@ def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False
 
 
 def from_hours(data, dim='date', hour='hours', **kwargs):
+    """ Combine separate times to one datetime axis
+
+    Args:
+        data (DataArray): Inputdata
+        dim (str): datetime dimension
+        hour (str): time dimension
+        **kwargs:
+
+    Returns:
+        DataArray : combined datetime axis DataArray
+    """
     import pandas as pd
     from xarray import DataArray, concat
 
@@ -614,7 +629,7 @@ def from_hours(data, dim='date', hour='hours', **kwargs):
     data = data.copy()
     data = dict(data.groupby(hour))
     for ikey, idata in data.items():
-        # transform datetime to daily freqency
+        # transform datetime to daily freqency (inplace?)
         idata[dim].values = (idata[dim].to_index() + pd.DateOffset(hours=int(ikey))).values
     return concat(data.values(), dim=dim).sortby(dim)
 
@@ -651,4 +666,3 @@ def day_night_departures(data, dim='date', standardize=True, **kwargs):
     data.attrs['standard_name'] += '_day_night_dep'
     data.attrs['cell_method'] = 'noon - night'
     return data
-

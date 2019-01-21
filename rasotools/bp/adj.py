@@ -2,9 +2,9 @@
 import numpy as np
 
 from . import dep
-from ..fun import message
+from ..fun import message, nancount, kwc, kwu
 
-__all__ = ['mean', 'quantile', 'quantile_reference', 'index_samples']
+__all__ = ['mean', 'quantile', 'quantile_reference']
 
 
 def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bounded=None, recent=False, ratio=True,
@@ -13,7 +13,7 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bou
 
     Args:
         data (array): radiosonde data
-        breaks (list, slice): breakpoint indices
+        breaks (list): breakpoint indices
         axis (int): axis of datetime
         sample_size (int): minimum sample size
         borders (int): adjust breaks with borders
@@ -28,34 +28,44 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bou
     """
     if not isinstance(data, np.ndarray):
         raise ValueError("requires a numpy array")
-    if not isinstance(breaks, (list, np.ndarray)):
-        raise ValueError('requires a numpy array of list')
+    if not isinstance(breaks, (np.ndarray, list)):
+        raise ValueError('requires a numpy array')
 
     data = data.copy()
-    breaks = np.sort(np.asarray(breaks))
+    dshape = data.shape  # Shape of data (date x levs)
+    imax = dshape[axis]  # maximum index
+    breaks = np.sort(np.asarray(breaks))  # sort
+    breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
     nb = breaks.size
-    imax = data.shape[axis]
-    # Last Breakpoint
-    if (breaks[-1] + sample_size) > imax:
-        message(Warning("Reference Dataset is short <%d" % sample_size), **kwargs)
 
-    for ib in reversed(range(nb)):
-        # Biased: [MAX, Breakpoint]  will be adjusted
-        # Sample: [MAX, Breakpoint - Borders]  used for calc.
-        # Reference: [Breakpoint + Borders, MAX]  used for calc.
-        ibiased, isample, iref = index_samples(breaks, ib, axis, data.shape, recent=recent, sample_size=sample_size,
-                                               borders=borders, max_sample=max_sample)
+    for i in reversed(range(1, nb - 1)):
+        # Indices
+        im = breaks[i - 1]  # earlier
+        ib = breaks[i]  # current breakpoint
+        if recent:
+            ip = imax
+        else:
+            ip = breaks[i + 1]  # later
 
-        message(ib, 'Apply:', ibiased[axis], 'Cal:', isample[axis], 'Comp:', iref[axis], 'B:', borders, 'M:',
-                max_sample, **kwargs)
-
-        data[ibiased] = dep.mean(data, iref, isample, axis=axis, sampleout=ibiased, sample_size=sample_size,
-                                 bounded=bounded, ratio=ratio)
-
+        # Slices all axes
+        iref = slice(ib, ip)
+        isample = slice(im, ib)
+        isample = idx2shp(isample, axis, dshape)
+        iref = idx2shp(iref, axis, dshape)
+        # Before Adjustments
+        before = np.nanmean(data[isample], axis=axis)
+        # Apply Adjustments
+        data[isample] = dep.mean(data, iref, isample, axis=axis, sample_size=sample_size, max_sample=max_sample,
+                                 borders=borders, bounded=bounded, ratio=ratio)
+        # Debug infos
+        if kwc('verbose', value=2, **kwargs):
+            sdata = stats(data, iref, isample, axis=axis, a=before)
+            sdata = np.array_str(sdata, precision=2, suppress_small=True)
+            message(sdata, **kwu('level', 1, **kwargs))
     return data
 
 
-def quantile(data, breaks, axis=0, quantilen=None, sample_size=180, borders=30, max_sample=1460, bounded=None,
+def quantile(data, breaks, axis=0, quantilen=None, sample_size=130, borders=30, max_sample=1460, bounded=None,
              recent=False, ratio=True, **kwargs):
     """ Percentile Adjustment of breakpoints
 
@@ -85,19 +95,36 @@ def quantile(data, breaks, axis=0, quantilen=None, sample_size=180, borders=30, 
     if quantilen is None:
         quantilen = np.arange(0, 101, 10)
 
-    breaks = np.sort(np.asarray(breaks))
-    nb = len(breaks)
-    imax = data.shape[axis]
-    # Last Breakpoint
-    if (breaks[-1] + sample_size) > imax:
-        message(Warning("Reference Data set is shorter than 1 year"), **kwargs)
+    dshape = data.shape
+    imax = dshape[axis]
+    breaks = np.sort(np.asarray(breaks))  # sort
+    breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
+    nb = breaks.size
 
-    for ib in reversed(range(nb)):
-        ibiased, isample, iref = index_samples(breaks, ib, axis, data.shape, recent=recent, sample_size=sample_size,
-                                               borders=borders, max_sample=max_sample)
+    for i in reversed(range(1, nb - 1)):
+        # Indices
+        im = breaks[i - 1]  # earlier
+        ib = breaks[i]  # current breakpoint
+        if recent:
+            ip = imax
+        else:
+            ip = breaks[i + 1]  # later
 
-        data[ibiased] = dep.quantile(data, iref, isample, quantilen, axis=axis, sampleout=ibiased,
-                                     sample_size=sample_size, bounded=bounded, ratio=ratio)
+        # slices all axes
+        ibiased = slice(im, ib)
+        isample = slice(im, ib)
+        isample = idx2shp(isample, axis, dshape)
+        iref = idx2shp(iref, axis, dshape)
+
+        before = np.nanmean(data[isample], axis=axis)
+        # Apply Adjustments
+        data[ibiased] = dep.quantile(data, iref, isample, quantilen, axis=axis, sample_size=sample_size,
+                                     max_sample=max_sample, borders=borders, bounded=bounded, ratio=ratio)
+        # Debug infos
+        if kwc('verbose', value=2, **kwargs):
+            sdata = stats(data, iref, isample, axis=axis, a=before)
+            sdata = np.array_str(sdata, precision=2, suppress_small=True)
+            message(sdata, **kwu('level', 1, **kwargs))
 
     return data
 
@@ -155,125 +182,109 @@ def quantile_reference(xdata, ydata, breaks, axis=0, quantilen=None, sample_size
     return xdata, ydata
 
 
-def index_samples(breaks, ibreak, axis, dshape, recent=False, sample_size=130, borders=30, max_sample=1460):
-    """ Apply Breakpoints to data shape, return index lists
-
-    Args:
-        breaks (list, np.ndarray): Breakpoints
-        ibreak (int): index of current Breakpoint
-        axis (int): datetime axis
-        dshape (tuple): shape of data array
-        recent (bool): always use the whole recent part
-        sample_size (int): minimum sample size
-        borders (int): Breakpoint borders/uncertainty
-        max_sample: maximum samples
-
-    Returns:
-        list, list, list : Biased , Sample, Reference
-    """
-    imax = dshape[axis]
-    biased, ref = sample_indices(breaks, ibreak, imax, recent=recent)
-    sample, ref = adjust_samples(biased, ref, sample_size, borders=borders, max_sample=max_sample)
-    return idx2shp(biased, axis, dshape), idx2shp(sample, axis, dshape), idx2shp(ref, axis, dshape)
-
-
-def idx2shp(period, axis, shape):
+def idx2shp(idx, axis, shape):
     index = [slice(None)] * len(shape)
-    index[axis] = period
+    index[axis] = idx
     return tuple(index)
 
 
-def sample_indices(breaks, ibreak, imax, recent=False):
-    """ Indices of Samples before and after a bp
+def stats(data, ref, sample, axis=0, a=None):
+    # print counts, means, dep
+    sn = nancount(data[sample], axis=axis)
+    s = np.nanmean(data[sample], axis=axis)
+    rn = nancount(data[ref], axis=axis)
+    r = np.nanmean(data[ref], axis=axis)
+    if a is not None:
+        return np.array([sn, a, s, r - s, r, rn]).T
+    return np.array([sn, s, r - s, r, rn]).T
 
-    Args:
-        breaks (list, np.ndarray) :        Breakpoints
-        ibreak (int) :          current Breakpoint
-        imax (int) :            maximum index
-        recent (bool) :         use all newest Data
+# def index_samples(breaks, ibreak, axis, dshape, recent=False, sample_size=130, borders=30, max_sample=1460):
+#     """ Apply Breakpoints to data shape, return index lists
+#
+#     Args:
+#         breaks (list, np.ndarray): Breakpoints
+#         ibreak (int): index of current Breakpoint
+#         axis (int): datetime axis
+#         dshape (tuple): shape of data array
+#         recent (bool): always use the whole recent part
+#         sample_size (int): minimum sample size
+#         borders (int): Breakpoint borders/uncertainty
+#         max_sample: maximum samples
+#
+#     Returns:
+#         list, list, list : Biased , Sample, Reference
+#     """
+#     imax = dshape[axis]
+#     biased, ref = sample_indices(breaks, ibreak, imax, recent=recent)
+#     sample, ref = adjust_samples(biased, ref, sample_size, borders=borders, max_sample=max_sample)
+#     return idx2shp(biased, axis, dshape), idx2shp(sample, axis, dshape), idx2shp(ref, axis, dshape)
+# def sample_indices(breaks, ibreak, imax, recent=False):
+#     """ Indices of Samples before and after a bp
+#
+#     Args:
+#         breaks (list, np.ndarray) :        Breakpoints
+#         ibreak (int) :          current Breakpoint
+#         imax (int) :            maximum index
+#         recent (bool) :         use all newest Data
+#
+#     Returns:
+#         tuple: sample indices
+#     """
+#     n = len(breaks)
+#
+#     if ibreak > 0:
+#         anfang = breaks[ibreak - 1]
+#     else:
+#         anfang = 0  # takes all the stuff? or only sometime after the break?
+#
+#     mitte = breaks[ibreak]  # Mittelpunkt ist der Bruchpunkt
+#
+#     if ibreak == (n - 1) or recent:
+#         ende = imax  # most recent
+#     else:
+#         ende = breaks[ibreak + 1]  # bp before
+#
+#     sample1 = slice(anfang, mitte)  # erste Teil (indices niedriger)
+#     sample2 = slice(mitte, ende)  # Zweite Teil (indices höher)
+#     return sample1, sample2
 
-    Returns:
-        tuple: sample indices
-    """
-    n = len(breaks)
-
-    if ibreak > 0:
-        anfang = breaks[ibreak - 1]
-    else:
-        anfang = 0  # takes all the stuff? or only sometime after the break?
-
-    mitte = breaks[ibreak]  # Mittelpunkt ist der Bruchpunkt
-
-    if ibreak == (n - 1) or recent:
-        ende = imax  # most recent
-    else:
-        ende = breaks[ibreak + 1]  # bp before
-
-    sample1 = slice(anfang, mitte)  # erste Teil (indices niedriger)
-    sample2 = slice(mitte, ende)  # Zweite Teil (indices höher)
-    return sample1, sample2
-
-
-def adjust_samples(ibiased, iref, sample_size, borders, max_sample):
-    # start -> kleiner index (nächster Bruchpunkt, früher)
-    # stop -> grosser index (Bruchpunkt)
-    n = ibiased.stop - ibiased.start  # sample size
-    isample = slice(ibiased.start, ibiased.stop)  # isample == ibiased
-    if n - 2 * borders > sample_size:
-        isample = slice(ibiased.start + borders, ibiased.stop - borders)  # ohne Borders
-        if n - 2 * borders > max_sample:
-            isample = slice(ibiased.stop - borders - max_sample, ibiased.stop - borders)  # nur max_sample
-
-    n = iref.stop - iref.start
-    if n - 2 * borders > sample_size:
-        iref = slice(iref.start + borders, iref.stop - borders)
-        if n - 2 * borders > max_sample:
-            iref = slice(iref.start, iref.start + max_sample)
-
-    return isample, iref
-
-
-def break_iterator(breaks, axis, dshape, left_align=True, borders=30, max_sample=1460, **kwargs):
-    """ break point *iterator* (list for iteration)
-
-    Parameters
-    ----------
-    breaks : list
-        list of breakpoints
-    axis : int
-        axis of datetime dim
-    dshape : tuple
-        shape of array
-    left_align : bool
-        period is between breakpoint and more recent part if True
-    borders : int
-        number of obs to remove near breakpoint
-    max_sample : int
-        maximum number of allowed obs
-    kwargs : dict
-
-    Returns
-    -------
-    list
-        list of indices
-    """
-    breaks = list(breaks).copy()
-    breaks.append(0)
-    breaks = sorted(breaks, reverse=True)  # from present (large) to past (small)
-    out = []
-    jb = dshape[axis]  # maximum date index
-
-    for i, ib in enumerate(breaks):
-        sample = slice(ib, jb)  # smaller to larger index
-        n = jb - ib
-        if n > 2 * borders:
-            sample = slice(ib + borders, jb - borders)
-            if n - 2 * borders > max_sample:
-                if left_align:
-                    sample = slice(ib + borders, ib + borders + max_sample)
-                else:
-                    sample = slice(jb - borders - max_sample, jb - borders)
-
-        out.append(tuple(idx2shp(sample, axis, dshape)))
-        jb = ib
-    return out
+#
+# def adjust_samples(ibiased, iref, sample_size, borders, max_sample):
+#     # start -> kleiner index (nächster Bruchpunkt, früher)
+#     # stop -> grosser index (Bruchpunkt)
+#     n = ibiased.stop - ibiased.start  # sample size
+#     isample = slice(ibiased.start, ibiased.stop)  # isample == ibiased
+#     if n - 2 * borders > sample_size:
+#         isample = slice(ibiased.start + borders, ibiased.stop - borders)  # ohne Borders
+#         if n - 2 * borders > max_sample:
+#             isample = slice(ibiased.stop - borders - max_sample, ibiased.stop - borders)  # nur max_sample
+#
+#     n = iref.stop - iref.start
+#     if n - 2 * borders > sample_size:
+#         iref = slice(iref.start + borders, iref.stop - borders)
+#         if n - 2 * borders > max_sample:
+#             iref = slice(iref.start, iref.start + max_sample)
+#
+#     return isample, iref
+#
+# def breakpoint_zone(x, thres, axis=0, k=200, recent=False, target=None):
+#     n = x.shape[axis]
+#
+#     if target is not None:
+#         m1 = target
+#     else:
+#         m1 = np.nanmean(x, axis=axis)  # total median as backup
+#
+#     dep = x - m1
+#     j = None
+#
+#     for i in range(n - k, 0, -k):
+#         if not recent:
+#             j = i + k if i + k < n else n
+#         itx = idx2shp(slice(i, j), axis, x.shape)
+#         s1 = np.where(np.isfinite(dep[itx]).sum(axis=axis) > 0, np.nanmean(dep[itx], axis=axis), m1)
+#         l = i - k if i - k > 0 else 0
+#         jtx = idx2shp(slice(l, i), axis, x.shape)
+#         s2 = np.where(np.isfinite(dep[jtx]).sum(axis=axis) > 0, np.nanmean(dep[jtx], axis=axis), m1)
+#         dep[jtx] += np.where(np.abs(s1 - s2) > thres, (s1 - s2), 0.)
+#     return m1 + dep

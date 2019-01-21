@@ -21,7 +21,7 @@ def threshold(data, dim='date', lev=None, thres=50, colorlevels=None, legend=Tru
 
     """
     from xarray import DataArray
-    from ._helpers import line, contour, set_labels, get_info
+    from ._helpers import line, contour, set_labels, get_info, plot_levels as pl, plot_arange as pa
 
     if not isinstance(data, DataArray):
         raise ValueError('Requires a DataArray', type(data))
@@ -64,6 +64,7 @@ def summary(data, dim='date', thres=None, ax=None, **kwargs):
     Returns:
 
     """
+    import numpy as np
     from xarray import DataArray
     from ._helpers import line, set_labels, get_info
 
@@ -80,10 +81,11 @@ def summary(data, dim='date', thres=None, ax=None, **kwargs):
                    title=get_info(data), ylabel='Sum (' + ",".join([get_info(data[i]) for i in idims]) + ')')
 
         ax = line(data[dim].values, data.sum(idims).values, ax=ax, **kwargs)
+        ax.set_ylim(0, 5000)
         if thres is not None:
-            ax.set_ylim(0, 20 * thres)
             ay = ax.twinx()
-            ay = line(data[dim].values, (data >= thres).sum(idims).values, ax=ay, **kwargs)
+            ay = line(data[dim].values, (data >= thres).sum(idims).values, ax=ay, color=kwargs.pop('color', 'r'))
+            ay.set_yticks(np.linspace(ay.get_yticks()[0], ay.get_yticks()[-1], len(ax.get_yticks())))
             return ax, ay
     else:
         set_labels(kwargs, xlabel=get_info(data[dim]),
@@ -138,13 +140,14 @@ def var(data, dim='date', lev=None, colorlevels=None, logy=False, yticklabels=No
                        yticklabel=yticklabels, legend=legend, **kwargs)
 
 
-def breakpoints(data, dim='date', thres=1, borders=None, filled=False, ax=None, **kwargs):
+def breakpoints(data, dim='date', thres=2, startend=False, borders=None, filled=False, ax=None, **kwargs):
     """
 
     Args:
         data (DataArray): Breakpoint data
         dim (str): datetime dimension
         thres (int, float): threshold to id breaks
+        startend (bool): start end thresholds
         borders (int): breakpoint borders
         ax: Axes
         **kwargs:
@@ -152,6 +155,7 @@ def breakpoints(data, dim='date', thres=1, borders=None, filled=False, ax=None, 
     Returns:
         Axes
     """
+    import numpy as np
     from xarray import DataArray
     import matplotlib.pyplot as plt
     from ..bp import get_breakpoints
@@ -163,11 +167,22 @@ def breakpoints(data, dim='date', thres=1, borders=None, filled=False, ax=None, 
         raise ValueError('Requires a datetime dimension', dim)
 
     dates = data[dim].values
-    indices, breaks = get_breakpoints(data, dim=dim, sign=thres, dates=True)
+    indices = get_breakpoints(data, thres, dim=dim)
+    e = []
+    s = []
+    axis = data.dims.index(dim)
+    summe = data.values.sum(axis=1 if axis == 0 else 0)
+    for k in indices:
+        l = np.where(summe[:k][::-1] == 0)[0][0]
+        m = np.where(summe[k:] == 0)[0][0]
+        e += [k - l]
+        s += [k + m]
+
     if ax is None:
         f, ax = plt.subplots()  # 1D SNHT PLOT
 
-    for i, ib in zip(indices, breaks):
+    j = 0
+    for i, ib in zip(indices, dates[indices]):
         ax.axvline(x=ib,
                    ls=kwargs.get('ls', '-'),
                    lw=kwargs.get('lw', 1),
@@ -175,11 +190,18 @@ def breakpoints(data, dim='date', thres=1, borders=None, filled=False, ax=None, 
                    marker=kwargs.get('marker', None),
                    alpha=kwargs.get('alpha', 1),
                    color=kwargs.get('color', 'k'))  # Line Plot
-        if borders is not None:
+        if startend:
+            ax.axvline(x=dates[s[j]], color='r', ls='--', alpha=0.5)
+            ax.axvline(x=dates[e[j]], color='b', ls='--', alpha=0.5)
+
+        elif borders is not None:
             if filled:
                 ax.axvspan(dates[i - borders], dates[i + borders], color=kwargs.get('color', None), alpha=0.5)
             else:
                 ax.axvline(x=dates[i - borders], color=kwargs.get('color', None), ls='--', alpha=0.5)
                 ax.axvline(x=dates[i + borders], color=kwargs.get('color', None), ls='--', alpha=0.5)
+        else:
+            pass
+        j += 1
 
     return ax

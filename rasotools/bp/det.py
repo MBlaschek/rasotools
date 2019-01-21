@@ -36,55 +36,35 @@ def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwa
         for i in prange(nlevels):
             tmp += detector(data, axis=axis, min_levels=i, **kwargs)
 
-    return tmp/np.max(tmp)
+    return tmp / np.max(tmp)
 
 
-def detector(data, axis=0, dist=365, thres=50, min_levels=3, start=False, start_middle=False, **kwargs):
+def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, **kwargs):
     if not isinstance(data, np.ndarray):
         raise ValueError("requires an array: %s" % str(type(data)))
 
-    breaks = np.where(data >= thres, 1, 0)  # mark
+    breaks = (data >= thres).astype(int)  # 0, 1
 
     if data.ndim > 1:
         # number of breaks per timeunit
-        ibreak = np.sum(breaks, axis=1 if axis == 0 else 0)
-        # combine #-breaks and sum of test
-        comb = np.sum(data, axis=1 if axis == 0 else 0) * ibreak
-
-        # find local maxima (within distance)
-        imax = local_maxima(comb, dist=dist)
+        jbreak = np.sum(breaks, axis=1 if axis == 0 else 0)
+        # combine #-significant and sum of test
+        jbreak = np.where(jbreak >= min_levels, 1, 0)
+        ibreak = jbreak * np.sum(data, axis=1 if axis == 0 else 0)
     else:
-        # find local maxima (within distance)
-        imax = local_maxima(data * breaks, dist=dist)
+        ibreak = data * breaks
+
+    # find local maxima (within distance)
+    if use_slopes:
+        imax = local_maxima(np.diff(ibreak), dist=dist)
+    else:
+        imax = local_maxima(ibreak, dist=dist)
 
     if len(imax) > 0:
         imax = np.asarray(imax)
         message("Breaks: " + str(imax), **kwargs)
-        if data.ndim > 1:
-            message("Update (", min_levels, "):", str(ibreak[imax]), **kwargs)
-            imax = imax[ibreak[imax] >= min_levels]
-            if start:
-                # get the start of these breakpoints
-                if start_middle:
-                    # or add the integer mean
-                    imax = [i + find_constant(comb[i:], 10, n=100)//2 for i in imax]
-                else:
-                    imax = [i + find_constant(comb[i:], 10, n=100) for i in imax]
-
-                message("Update (Levels) + Start: ", str(imax), **kwargs)
-            else:
-                message("Update (Levels): ", str(imax), **kwargs)
-
-            itx = [slice(None)] * data.ndim
-            itx[axis] = imax
-            # fill new values
-            # 1: significant
-            # 2: ende
-            # 3: start
-            # 4: breakpoint
-            breaks[tuple(itx)] = np.where(data[tuple(itx)] >= thres, 1, 0) + 1   # 0 nix, 1 breakpoint, 2 significant level
-        else:
-            breaks[imax] = 1
+        for i in imax:
+            breaks[idx2shp(i, axis, data.shape)] *= 2  # maximum Breakpoint
 
     return breaks
 
@@ -184,7 +164,7 @@ def numba_snhtmov(t, tsa, snhtparas, count, tmean, tsquare):
                 xy = (tmean[count[xp]] - tmean[count[xm]]) / (count[xp] - count[xm])  # Mittelwert ganze Periode
 
                 sig = (tsquare[count[xp]] - tsquare[count[xm]]) / (count[xp] - count[xm])  # t*t ganze Periode
-                if (sig > xy * xy):
+                if sig > xy * xy:
                     sig = np.sqrt(sig - xy * xy)  # standard deviation of the whole window
                     # n1 * (m1-m)**2 + n2 * (m2-m)**2 / stddev
                     tsa[k] = ((count[k] - count[xm]) * (x - xy) * (x - xy) + (count[xp] - count[k]) * (y - xy) * (
@@ -218,26 +198,14 @@ def local_minima(x, dist=365):
     return minima
 
 
-@njit
-def find_constant(x, v, n=100):
+def find_constant(x, v, n=50):
     for i in range(0, len(x) - n):
         if np.sum(np.abs(np.diff(x[slice(i, i + n + 1)])) <= v) == n:
             break
     return i
 
 
-@njit
-def local_maxima_start(x, dist=365, n=100, v=10, start=True):
-    maxima = []  # Leere Liste
-    # Iteriere von 2 bis vorletzten Element
-    # ist iterator integer
-    for i in range(dist, len(x) - dist):
-        # Element davor und danach größer
-        if np.all((x[i] > x[slice(i + 1, i + dist)])) and np.all((x[slice(i - dist, i)] < x[i])):
-            # found a local maxima
-            j = find_constant(x[i:], v, n=n)
-            if start:
-                maxima.append(i + j)
-            else:
-                maxima.append(i + np.argmin(np.abs(np.median(x[i:i + j + 1]) - x[i:i + j + 1])))
-    return maxima
+def idx2shp(idx, axis, shape):
+    index = [slice(None)] * len(shape)
+    index[axis] = idx
+    return tuple(index)

@@ -38,6 +38,51 @@ def nancount(x, axis=0, keepdims=False):
     return np.sum(np.isfinite(x), axis=axis, keepdims=keepdims)
 
 
+def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False):
+    """ Nan omitting function (numpy)
+
+    Args:
+        data (np.ndarray): data including NaN
+        n (int): minimum sample size
+        axis (int): datetime axis
+        nmax (int): maximum sample size
+        borders (int): border sample to ignore
+        func (callable): function to call
+        flip (bool): reverse data before applying the function
+
+
+    Returns:
+        np.ndarray : func of values at axis, with sample size, borders and maximum
+    """
+    import numpy as np
+    if func is None:
+        func = np.nanmean
+    return np.apply_along_axis(sample, axis, data, n, nmax, func, borders=borders, flip=flip)
+
+
+def sample(values, nmin, nmax, func, borders=0, flip=False):
+    import numpy as np
+    itx = np.isfinite(values)
+    n = itx.sum()
+    j = 0
+    if n > nmax:
+        if n > (nmax + borders):
+            j = borders
+        if flip:
+            return func(np.flip(values[itx])[j:(nmax + j)])  # reversed
+        return func(values[itx][j:(nmax + j)])  # normal
+
+    elif n < nmin:
+        return np.nan
+
+    else:
+        if n > (nmin * 2 + borders):
+            j = borders
+        if flip:
+            return func(np.flip(values[j:]))
+        return func(values[j:])
+
+
 def fuzzy_all(x, axis=0, thres=2):
     """ fuzzy all true or not
 
@@ -432,6 +477,12 @@ def xarray_function_wrapper(x, wfunc=None, **kwargs):
 
     Returns:
         DataArray : result of function call retains attrs
+
+    Examples:
+        >>> def myfunc(x, **kwargs):
+        >>>     return np.isfinite(x).sum(**kwargs)
+        >>> data = xr.DataArray(np.random.randn(1000,2), dims=('time','lev'), coords=[pd.date_range('1-1-2019', periods=1000), [10, 12]])
+        >>> xarray_function_wrapper(data, wfunc=myfunc, dim='time', axis=0)
     """
     import xarray as xr
     if not isinstance(x, xr.DataArray):
@@ -440,6 +491,9 @@ def xarray_function_wrapper(x, wfunc=None, **kwargs):
     jdims = list(x.dims)
     if 'dim' in kwargs.keys():
         jdims.remove(kwargs.pop('dim'))
+        if 'axis' not in kwargs.keys():
+            raise RuntimeWarning('axis keyword not present')
+            # kwargs['axis'] = x.dims.index(kwargs['dim'])   # add axis keyword
 
     if kwargs.pop('debug', False):
         print(x.dims, x.shape, wfunc)

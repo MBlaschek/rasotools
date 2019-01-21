@@ -4,7 +4,7 @@ import pickle
 
 import numpy as np
 import xarray as xr
-from .fun import message, dict2str
+from .fun import message, dict2str, kwu
 
 __all__ = ["Radiosonde", "open_radiosonde", "load_radiosonde"]
 
@@ -74,7 +74,9 @@ class Radiosonde(object):
         return summary
 
     def __getitem__(self, item):
-        return getattr(self.data, item, default=None)
+        if item in self.data:
+            return getattr(self.data, item)
+        return None
 
     def __setitem__(self, key, value):
         if key in self.data:
@@ -88,21 +90,12 @@ class Radiosonde(object):
     def add(self, name, variable=None, filename=None, directory=None, xwargs={}, **kwargs):
         """ Add data to radiosonde class object [container]
 
-        Parameters
-        ----------
-        name : str
-            used as filename and/or as data name
-        variable : list / str
-            variable names to look for
-        filename : str
-            filename to read from (netcdf)
-        directory :
-            directory of radiosonde store, default config rasodir
-        xwargs : dict
-            keyword arguments to xarray open_dataset
-        kwargs : dict
-            optional keyword arguments
-
+        Args:
+            name (str): used as filename and/or as data name
+            variable (str): variable names to look for
+            filename (str): filename to read from (netcdf)
+            directory (str): directory of radiosonde store, default config rasodir
+            xwargs (dict): keyword arguments to xarray open_dataset
         """
         from . import config
 
@@ -141,7 +134,7 @@ class Radiosonde(object):
             else:
                 ifilename = filename
 
-            message("Reading ...",ifilename, **kwargs)
+            message("Reading ...", ifilename, **kwargs)
             ds = xr.open_dataset(ifilename, **xwargs)
 
             if variable is not None:
@@ -167,18 +160,27 @@ class Radiosonde(object):
                     ds = None
 
             else:
-                ds = xr.open_dataset(ifilename, **kwargs)
+                ds = xr.open_dataset(ifilename, **xwargs)
 
             if ds is not None:
-                message(iname, level=1, **kwargs)
+                message(iname, **kwu('level', 1, **kwargs))
                 setattr(self.data, iname, ds)
 
         if self.ident == 'Unknown':
             print("Please change the IDENT")
 
     def clear(self, exclude=None, **kwargs):
-        for idata in self.data:
+        if exclude is None:
+            exclude = []
+        else:
+            if not isinstance(exclude, list):
+                exclude = [exclude]
+
+        for idata in list(self.data):
             if idata not in exclude:
+                if hasattr(self.data[idata], 'close'):
+                    self.data[idata].close()  # for xarray netcdf open files
+                    message(idata, 'closed', **kwargs)
                 del self.data[idata]
                 message(idata, **kwargs)
 
@@ -187,30 +189,46 @@ class Radiosonde(object):
             self.data.__dict__[new_name] = self.data.__dict__.pop(old_name)
             message(old_name, " > ", new_name, **kwargs)
 
-    def inquire(self, dataset, dim=None, per='M', get_counts=True, get_times=True):
-        from .met.time import count_per_times, count_per
+    def count(self, name, dim=None, per='M', **kwargs):
+        """ Count available data per time period (M)
 
-        if dataset in self.data:
-            idata = self.data[dataset]
-            if get_counts or get_times:
-                tmp = {}
-                for ivar in idata.data_vars:
-                    tmp[ivar] = count_per(idata[ivar], dim=dim, per=per)
-                counts = xr.Dataset(tmp)
-                if not get_times:
-                    return counts
+        Args:
+            name (str): dataset name
+            dim (str): datetime dimension
+            per (str): period (M, A,...)
+            **kwargs:
 
-            if get_times:
-                tmp = {}
-                for ivar in idata.data_vars:
-                    if dim in idata[ivar].dims:
-                        tmp[ivar] = count_per_times(idata[ivar], dim=dim)
-                times = xr.Dataset(tmp)
-                if not get_counts:
-                    return times
+        Returns:
+            xr.Dataset : counts
+        """
+        from .met.time import count_per
+        if name in self.data:
+            tmp = {}
+            for ivar, idata in self.data[name].data_vars.items():
+                tmp[ivar] = count_per(idata, dim=dim, per=per)
+            return xr.Dataset(tmp)
+        message('Unknown Input', name, 'Choose: ', list(self.data), **kwargs)
+        return None
 
-            return counts, times
+    def count_times(self, name, dim=None, **kwargs):
+        """ Count sounding times
 
+        Args:
+            name (str): dataset name
+            dim (str): datetime dimension
+            **kwargs:
+
+        Returns:
+            xr.Dataset : counts per sounding time
+        """
+        from .met.time import count_per_times
+        if name in self.data:
+            tmp = {}
+            for ivar, idata in self.data[name].data_vars.items():
+                if dim in idata.dims:
+                    tmp[ivar] = count_per_times(idata, dim=dim)
+            return xr.Dataset(tmp)
+        message('Unknown Input', name, 'Choose: ', list(self.data), **kwargs)
         return None
 
     def list_store(self, directory=None, varinfo=False, ncinfo=False):
@@ -252,22 +270,14 @@ class Radiosonde(object):
             print("Store not found!")
 
     def to_netcdf(self, name, filename=None, directory=None, force=False, xargs={}, **kwargs):
-        """ Write each data variable to NetCDF 4
+        """Write each data variable to NetCDF 4
 
-        Parameters
-        ----------
-        name : str
-            data name
-        filename : str
-            filename
-        directory : str
-            directory to write to, default: rasodir in config
-        force : bool
-            force new file
-        xargs : dict
-            keywords as dict to Xarray function
-        Returns
-        -------
+        Args:
+            name (str): data name
+            filename (str): filename
+            directory (str): directory
+            force (bool): force new file
+            xargs (dict): keywords as dict to XArray function to_netcdf
 
         """
         from . import config
@@ -318,16 +328,10 @@ class Radiosonde(object):
     def dump(self, name=None, filename=None, directory=None, **kwargs):
         """ Pickle dump the whole radiosonde class object
 
-        Parameters
-        ----------
-        name : str
-            name of file or ident
-        filename : str
-            filename
-        directory : str
-            directory of radiosonde store, default config rasodir
-        kwargs : dict
-            optional keyword arguments
+        Args:
+            name (str): name of file or ident
+            filename (str): filename
+            directory (str): directory of radiosonde store, default config rasodir
 
         """
         from . import config
@@ -352,32 +356,22 @@ class Radiosonde(object):
 
         message("Writing", filename, **kwargs)
         with open(filename, 'wb') as f:
-            pickle.dump(self, f)   # Pickle everything
+            pickle.dump(self, f)  # Pickle everything
 
 
 def open_radiosonde(name, ident=None, variable=None, filename=None, directory=None, xwargs={}, **kwargs):
     """ Create a Radiosonde object from opening a dataset
 
-    Parameters
-    ----------
-    name : str
-        used as filename and/or as data name
-    ident : str
-        radiosonde wmo or igra id
-    variable : list / str
-        variable names to look for
-    filename : str
-        filename to read from (netcdf)
-    directory :
-        directory of radiosonde store, default config rasodir
-    xwargs : dict
-        keyword arguments to xarray open_dataset
-    kwargs : dict
-        optional keyword arguments
+    Args:
+        name (str): used as filename and/or as data name
+        ident (str): radiosonde wmo or igra id
+        variable (list, str): variable names to look for
+        filename (str): filename to read from (netcdf)
+        directory (str): directory of radiosonde store, default config rasodir
+        xwargs (dict): keyword arguments to xarray open_dataset
 
-    Returns
-    -------
-    Radiosonde
+    Returns:
+        Radiosonde : Radiosonde class object
     """
     if ident is None:
         ident = "Unknown"
@@ -391,19 +385,13 @@ def open_radiosonde(name, ident=None, variable=None, filename=None, directory=No
 def load_radiosonde(name=None, filename=None, directory=None, **kwargs):
     """ Read a radiosonde class dump file
 
-    Parameters
-    ----------
-    name : str
-        name of dump in rasodir
-    filename : str
-        filename of dump file
-    directory : str
-        directory of file (name)
-    kwargs : dict
+    Args:
+        name (str): name of dump in rasodir
+        filename (str): filename of dump file
+        directory (str): directory of file (name)
 
-    Returns
-    -------
-    Radiosonde
+    Returns:
+        Radiosonde : Radiosonde class object
     """
     if name is None and filename is None:
         raise ValueError("Requires either name or filename")
@@ -421,22 +409,17 @@ def load_radiosonde(name=None, filename=None, directory=None, **kwargs):
 def list_in_list(jlist, ilist):
     """ compare lists and use wildcards
 
-    Parameters
-    ----------
-    jlist : list
-        list of search patterns
-    ilist : list
-        list of available choices
+    Args:
+        jlist (list): list of search patterns
+        ilist (list): list of available choices
 
-    Returns
-    -------
-    list
-        common elements
+    Returns:
+        list : common elements
     """
     out = []
     for ivar in jlist:
         if '*' in ivar:
-            new = [jvar for jvar in ilist if ivar.replace('*','') in jvar]
+            new = [jvar for jvar in ilist if ivar.replace('*', '') in jvar]
             out.extend(new)
         elif ivar in ilist:
             out.append(ivar)

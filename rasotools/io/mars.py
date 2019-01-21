@@ -1,12 +1,4 @@
 # -*- coding: utf-8 -*-
-import os
-
-import numpy as np
-import pandas as pd
-import xarray as xr
-
-from ..fun import message
-
 
 __all__ = ['open_mars_odb']
 
@@ -28,6 +20,7 @@ def open_mars_odb(ident, variables=None, filename=None, directory=None, force_re
     -------
     Dataset : MARS
     """
+    from ..fun import message
     from .. import config
 
     if directory is None:
@@ -64,6 +57,12 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
     -------
 
     """
+    import os
+
+    import numpy as np
+    import xarray as xr
+
+    from ..fun import message
     from .. import config
     from ..fun.interp import dataframe
 
@@ -76,9 +75,10 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
             message("Not all levels in ERA-I levels, interpolating again", levels, **kwargs)
 
     if not interp_new and os.path.isfile(config.rasodir + '/%s/MARS_ODB.nc' % ident) and not force:
-        # RECOVER ASCII
-        data = xr.open_dataset(config.rasodir + '/%s/MARS_ODB.nc' % ident)   # DataSet
-        save = False  # don't save non ERA-I levels complaint
+        #
+        # READ NetCDF
+        #
+        data = xr.open_dataset(config.rasodir + '/%s/MARS_ODB.nc' % ident)  # DataSet
         if levels is not None:
             message(ident, levels, **kwargs)
             data = data.sel(pres=levels)
@@ -86,13 +86,19 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
     else:
         if levels is None:
             levels = config.era_plevels
+        #
         # READ ASCII
+        #
         data, station = read_ascii(ident, filename=filename, **kwargs)  # DataFrame
         message(ident, levels, **kwargs)
-        numlev = data.groupby(data.index).nunique().max(axis=1)   # number of levels
+        numlev = data.groupby(data.index).nunique().max(axis=1)  # number of levels
+        #
+        # Interpolation
+        #
         data = dataframe(data, 'pres', levels=levels, **kwargs)
-
+        #
         # convert from Table to Array and add Metadata
+        #
         new = {}
         for ivar in data.columns.tolist():
             if ivar == 'pres':
@@ -102,31 +108,41 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
             new[ivar]['pres'].attrs.update({'units': 'Pa', 'standard_name': 'air_pressure', 'axis': 'Z'})
             new[ivar]['date'].attrs.update({'axis': 'T'})
 
-            if ivar in metadata.keys():
+            #
+            # Access global _metadata attributes
+            #
+            if ivar in _metadata.keys():
                 if 'dpd' in ivar:
                     if 'dewp' not in data.columns:
-                        attrs = metadata[ivar]
-                        attrs.update({'esat': 'FOEEWMO', 'rounded': 1})
+                        attrs = _metadata[ivar]
+                        attrs.update({'esat': 'foeewmo', 'rounded': 1})
                         new[ivar].attrs.update(attrs)
 
                 else:
-                    new[ivar].attrs.update(metadata[ivar])
-
+                    new[ivar].attrs.update(_metadata[ivar])
+        #
+        # Dataset + Attributes
+        #
         data = xr.Dataset(new)
         data.attrs.update({'ident': ident, 'source': 'ECMWF', 'info': 'MARS ODB', 'dataset': 'ERA-INTERIM',
-                           'levels': 'ERA-I 32 lower', 'processed': 'UNIVIE, IMG', 'libs': config.libinfo})
-
+                           'levels': 'plevs [%d -%d] #%d' %(min(levels), max(levels), len(levels)),
+                           'processed': 'UNIVIE, IMG', 'libs': config.libinfo})
+        #
+        # Station Information
+        #
         if not station.index.is_unique:
-            station = station.reset_index().drop_duplicates(['date','lon','lat','alt']).set_index('date')
+            station = station.reset_index().drop_duplicates(['date', 'lon', 'lat', 'alt']).set_index('date')
+
         station = station.reindex(np.unique(data.date.values))  # same dates as data
-        station = station.fillna(method='ffill')  # fill Missing information with last known
+        # station = station.fillna(method='ffill')  # fill Missing information with last known
         station['numlev'] = numlev
         station = station.to_xarray()
         for ivar, idata in station.data_vars.items():
             data[ivar] = idata
 
-    if save:
-        data.to_netcdf(config.rasodir + '/%s/MARS_ODB.nc' % ident)
+        if save:
+            data.to_netcdf(config.rasodir + '/%s/MARS_ODB.nc' % ident)
+            message(ident, 'Saving: ', config.rasodir + '/%s/MARS_ODB.nc' % ident, **kwargs)
 
     return data
 
@@ -150,6 +166,11 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
     DataFrame, DataFrame :
         data , station parameters
     """
+
+    import numpy as np
+    import pandas as pd
+
+    from ..fun import message
     from .. import config
 
     if filename_pattern is None:
@@ -159,12 +180,14 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
         ident = "%06d" % (int(ident))
 
     if filename is None:
+        if config.marsdir == '':
+            message(ident, 'Config: MARSDIR is unset', **kwargs)
         filename = config.marsdir + '/' + filename_pattern % int(ident)
 
     colnames = ['date', 'time', 'obstype', 'codetype', 'sondetype', 'ident', 'lat', 'lon', 'alt', 'pres',
                 'varno', 'obsvalue', 'biascorr', 'fg_dep', 'an_dep', 'status', 'anflag', 'event1']
 
-    message(ident,'Reading', filename, **kwargs)
+    message(ident, 'Reading', filename, **kwargs)
 
     tmp = pd.read_csv(filename, sep=' ', error_bad_lines=False, header=None, names=colnames, engine='c',
                       dtype={'date': str, 'time': str}, skipinitialspace=True)
@@ -174,36 +197,59 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
     tmp['newdate'] = pd.to_datetime(tmp.date + tmp.time, format='%Y%m%d%H%M%S')
     tmp = tmp.set_index('newdate').drop(['date', 'time'], 1)
     tmp.index.name = 'date'
-
+    #
+    # Different IDs?
+    #
     message(ident, str(tmp.shape), **kwargs)
-
     if np.size(tmp.ident.unique()) > 1:
         message("Multiple Idents in file: ", tmp.ident.unique(), **kwargs)
         tmp = tmp[tmp.ident == int(ident)]
-
-    station = tmp[['lon', 'lat', 'alt', 'sondetype', 'codetype', 'obstype']].drop_duplicates().sort_index()
+    #
+    # Separate Station Information
+    #
+    station = tmp[['lon', 'lat', 'alt', 'sondetype', 'codetype', 'obstype']].reset_index().drop_duplicates(
+        'date').set_index('date').sort_index()
     station.index.name = 'date'
-    tmp = tmp.drop(['lon', 'lat', 'alt', 'sondetype', 'codetype', 'obstype', 'ident', 'event1', 'status', 'anflag'], axis=1)
-
+    tmp = tmp.drop(['lon', 'lat', 'alt', 'sondetype', 'codetype', 'obstype', 'ident', 'event1', 'status', 'anflag'],
+                   axis=1)
+    #
+    # Variable Mappings
+    #
     variables = {1: 'geop', 2: 'temp', 3: 'uwind', 4: 'vwind', 7: 'qhumi', 29: 'rhumi', 59: 'dewp'}
-
+    #
+    # DataFrame with variables and same pres and dates
+    #
     data = pd.DataFrame(columns=['date', 'pres'])
     for i, ivar in variables.items():
         if not tmp.varno.isin([i]).any():
             continue
+        #
+        # new names
+        #
         mappings = {'obsvalue': ivar, 'fg_dep': '%s_fg_dep' % ivar, 'an_dep': '%s_an_dep' % ivar,
                     'biascorr': '%s_biascorr' % ivar}
         qdata = tmp.loc[tmp.varno == i, :].rename(columns=mappings).drop('varno', axis=1)
         qdata.index.name = 'date'
         qdata.drop_duplicates(inplace=True)
         qdata = qdata.reset_index()
+        #
+        # MERGE (slow)
+        #
         data = pd.merge(data, qdata, how='outer', on=['date', 'pres'])
         message(ident, 'Variable:', i, ivar, **kwargs)
 
+    #
+    # Sorting
+    #
     data = data.sort_values(['date', 'pres']).set_index('date')
     message(ident, 'Dropping duplicates', **kwargs)
+    #
+    # remove duplicates (?)
+    #
     data.drop_duplicates(inplace=True)
+    #
     # Apply conversion of t, r to DPD
+    #
     if 'dewp' in data.columns:
         # check how much data there is
         if data['dewp'].count().sum() > data['rhumi'].count().sum():
@@ -211,7 +257,7 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
 
     if 'dpd' not in data.columns:
         if data.columns.isin(['temp', 'rhumi']).sum() == 2:
-            data['dpd'] = (data['temp'] - dewpoint_ECMWF(data['temp'].values, data['rhumi'].values)).round(1)
+            data['dpd'] = (data['temp'] - dewpoint_ecmwf(data['temp'].values, data['rhumi'].values)).round(1)
             logic = data['dpd'].values < 0
             data['dpd'] = np.where(logic, 0, data['dpd'].values)
 
@@ -225,10 +271,10 @@ def foeewm(t, **kwargs):
     Based on Buck 1981 & Alduchov and Eskridge 1996
 
     Args:
-        t: air temperature K
+        t (any): air temperature K
 
     Returns:
-        es : saturation water vapor in Pa
+        np.ndarray : saturation water vapor in Pa
     """
     import numpy as np
     # T Larger than 273.15 K > only water
@@ -240,7 +286,7 @@ def foeewm(t, **kwargs):
     return e
 
 
-def FOEEWMO(t, **kwargs):
+def foeewmo(t, **kwargs):
     """from IFS Documentation Cycle 31,
     Teten's formula for water only
     after Tiedtke 1993 (cloud and large-scale precipitation scheme)
@@ -248,7 +294,7 @@ def FOEEWMO(t, **kwargs):
     Based on Buck 1981 & Alduchov and Eskridge 1996
 
     Args:
-        t: air temperature K
+        t (any): air temperature K
 
     Returns:
         es : saturation water vapor in Pa
@@ -257,7 +303,7 @@ def FOEEWMO(t, **kwargs):
     return 611.21 * np.exp(17.502 * (t - 273.16) / (t - 32.19))
 
 
-def sh2rh_ECMWF(q, t, p):
+def sh2rh_ecmwf(q, t, p):
     """ ECMWF IFS CYC31R1 Data Assimilation Documentation (Page 86-88)
 
     Conversion of q, t and p to r
@@ -273,13 +319,13 @@ def sh2rh_ECMWF(q, t, p):
     r       rel. humidity   [1]
     """
     import numpy as np
-    e = FOEEWMO(t) / p
+    e = foeewmo(t) / p
     a = np.where(e < 0.5, e, 0.5)
     a = np.where(np.isfinite(t), a, np.nan)  # TODO maybe remove this line?
     return q / (a * (1 + (461.5250 / 287.0597 - 1) * q))
 
 
-def rh2sh_ECMWF(r, t, p):
+def rh2sh_ecmwf(r, t, p):
     """ ECMWF IFS CYC31R1 Data Assimilation Documentation (Page 86-88)
 
     Conversion of r, t and p to q
@@ -295,20 +341,20 @@ def rh2sh_ECMWF(r, t, p):
     q       spec. humidty [kg/kg]
     """
     import numpy as np
-    e = FOEEWMO(t) / p
+    e = foeewmo(t) / p
     a = np.where(e < 0.5, e, 0.5)
     a = np.where(np.isfinite(t), a, np.nan)
     return r * (a / (1 - r * (461.5250 / 287.0597 - 1) * a))
 
 
-def dewpoint_ECMWF(t, rh, **kwargs):
+def dewpoint_ecmwf(t, rh, **kwargs):
     """ ECMWF IFS CYC31R1 Data Assimilation Documentation (Page 86-88)
     Derived Variables from TEMP
     Temperature and dew point are transformed into realtive humidity (RH) for
     TEMP observations, with a further transformation of RH into specific humidity (Q)
     for TEMP observations.
 
-    Uses FOEEWMO for water only saturation water vapor pressure
+    Uses foeewmo for water only saturation water vapor pressure
 
     Parameters
     ----------
@@ -320,34 +366,34 @@ def dewpoint_ECMWF(t, rh, **kwargs):
     td      dew point       [K]
     """
     import numpy as np
-    e = FOEEWMO(t) * rh
+    e = foeewmo(t) * rh
     lnpart = np.where(e > 0, np.log(e / 611.21), np.nan)
     return (17.502 * 273.16 - 32.19 * lnpart) / (17.502 - lnpart)
 
 
-metadata = {'temp': {'units': 'K', 'standard_name': 'air_temperature'},
-            'temp_fg_dep': {'units': 'K', 'standard_name': 'first guess departure'},
-            'temp_an_dep': {'units': 'K', 'standard_name': 'analysis departure'},
-            'temp_biascorr': {'units': 'K', 'standard_name': 'bias adjustment'},
-            'rhumi': {'units': '1', 'standard_name': 'relative_humidity'},
-            'rhumi_fg_dep': {'units': '1', 'standard_name': 'relative_humidity_first_guess_departure'},
-            'rhumi_an_dep': {'units': '1', 'standard_name': 'relative_humidity_analysis_departure'},
-            'rhumi_biascorr': {'units': '1', 'standard_name': 'relative_humidity_bias_adjusstment'},
-            'qhumi': {'units': 'kg/kg', 'standard_name': 'specific_humidity'},
-            'qhumi_fg_dep': {'units': 'kg/kg', 'standard_name': 'specific_humidity_first_guess_departure'},
-            'qhumi_an_dep': {'units': 'kg/kg', 'standard_name': 'specific_humidity_analysis_departure'},
-            'qhumi_biascorr': {'units': 'kg/kg', 'standard_name': 'specific_humidity_bias_adjustment'},
-            'dewp': {'units': 'K', 'standard_name': 'dew_point'},
-            'dewp_fg_dep': {'units': 'K', 'standard_name': 'dew_point_first_guess_departure'},
-            'dewp_an_dep': {'units': 'K', 'standard_name': 'dew_point_analysis_departure'},
-            'dewp_biascorr': {'units': 'K', 'standard_name': 'dew_point_bias_adjustment'},
-            'uwind': {'units': 'm/s', 'standard_name': 'eastward_wind'},
-            'uwind_fg_dep': {'units': 'm/s', 'standard_name': 'eastward_wind_first_guess_departure'},
-            'uwind_an_dep': {'units': 'm/s', 'standard_name': 'eastward_wind_analysis_departure'},
-            'uwind_biascorr': {'units': 'm/s', 'standard_name': 'eastward_wind_bias_adjustment'},
-            'vwind': {'units': 'm/s', 'standard_name': 'northward_wind'},
-            'vwind_fg_dep': {'units': 'm/s', 'standard_name': 'northward_wind_first_guess_departure'},
-            'vwind_an_dep': {'units': 'm/s', 'standard_name': 'northward_wind_analysis_departure'},
-            'vwind_biascorr': {'units': 'm/s', 'standard_name': 'northward_wind_bias_adjustment'},
-            'dpd': {'units': 'K', 'standard_name': 'dew_point_depression'}
-            }
+_metadata = {'temp': {'units': 'K', 'standard_name': 'air_temperature'},
+             'temp_fg_dep': {'units': 'K', 'standard_name': 'first guess departure'},
+             'temp_an_dep': {'units': 'K', 'standard_name': 'analysis departure'},
+             'temp_biascorr': {'units': 'K', 'standard_name': 'bias adjustment'},
+             'rhumi': {'units': '1', 'standard_name': 'relative_humidity'},
+             'rhumi_fg_dep': {'units': '1', 'standard_name': 'relative_humidity_first_guess_departure'},
+             'rhumi_an_dep': {'units': '1', 'standard_name': 'relative_humidity_analysis_departure'},
+             'rhumi_biascorr': {'units': '1', 'standard_name': 'relative_humidity_bias_adjusstment'},
+             'qhumi': {'units': 'kg/kg', 'standard_name': 'specific_humidity'},
+             'qhumi_fg_dep': {'units': 'kg/kg', 'standard_name': 'specific_humidity_first_guess_departure'},
+             'qhumi_an_dep': {'units': 'kg/kg', 'standard_name': 'specific_humidity_analysis_departure'},
+             'qhumi_biascorr': {'units': 'kg/kg', 'standard_name': 'specific_humidity_bias_adjustment'},
+             'dewp': {'units': 'K', 'standard_name': 'dew_point'},
+             'dewp_fg_dep': {'units': 'K', 'standard_name': 'dew_point_first_guess_departure'},
+             'dewp_an_dep': {'units': 'K', 'standard_name': 'dew_point_analysis_departure'},
+             'dewp_biascorr': {'units': 'K', 'standard_name': 'dew_point_bias_adjustment'},
+             'uwind': {'units': 'm/s', 'standard_name': 'eastward_wind'},
+             'uwind_fg_dep': {'units': 'm/s', 'standard_name': 'eastward_wind_first_guess_departure'},
+             'uwind_an_dep': {'units': 'm/s', 'standard_name': 'eastward_wind_analysis_departure'},
+             'uwind_biascorr': {'units': 'm/s', 'standard_name': 'eastward_wind_bias_adjustment'},
+             'vwind': {'units': 'm/s', 'standard_name': 'northward_wind'},
+             'vwind_fg_dep': {'units': 'm/s', 'standard_name': 'northward_wind_first_guess_departure'},
+             'vwind_an_dep': {'units': 'm/s', 'standard_name': 'northward_wind_analysis_departure'},
+             'vwind_biascorr': {'units': 'm/s', 'standard_name': 'northward_wind_bias_adjustment'},
+             'dpd': {'units': 'K', 'standard_name': 'dew_point_depression'}
+             }

@@ -121,7 +121,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
                 if 'dpd' in ivar:
                     if 'dewp' not in data.columns:
                         attrs = metadata[ivar]
-                        attrs.update({'esat': 'FOEEWMO', 'rounded': 1})
+                        attrs.update({'esat': 'foeewmo', 'rounded': 1})
                         new[ivar].attrs.update(attrs)
 
                 else:
@@ -569,16 +569,78 @@ metadata = {'temp': {'units': 'K', 'standard_name': 'air_temperature'},
             'winds': {'units': 'm/s', 'standard_name': 'wind_speed'}}
 
 
-def open_igra_metadata(ident, filename=None):
-    import pandas as pd
-    # TODO: io routine for IGRA metadata
-    # use default filename
-    from .. import config
+def open_igra_metadata(filename):
+    """ Read IGRAv2 _metadata file according to readme
 
-    file = config.get_data('igra-metadata.txt')
-    contents = pd.read_csv(file)
-    # search for ident in file and make a timeseries -> xarray
-    return contents
+    igra2-_metadata-readme.txt
+
+    Documentation for IGRA Station History Information
+    Accompanying IGRA Version 2.0.0b1
+    August 2014
+
+    Args:
+        filename (str):  igra2-_metadata.txt
+
+    Returns:
+        DataFrame
+    """
+    import pandas as pd
+    infos = """
+    IGRAID         1- 11   Character
+    WMOID         13- 17   Integer
+    NAME          19- 48   Character
+    NAMFLAG       50- 50   Character
+    LATITUDE      52- 60   Real
+    LATFLAG       62- 62   Character
+    LONGITUDE     64- 72   Real
+    LONFLAG       74- 74   Character
+    ELEVATION     76- 81   Real
+    ELVFLAG       83- 83   Character
+    YEAR          85- 88   Integer
+    MONTH         90- 91   Integer
+    DAY           93- 94   Integer
+    HOUR          96- 97   Integer
+    DATEIND       99- 99   Integer
+    EVENT        101-119   Character
+    ALTIND       121-122   Character
+    BEFINFO      124-163   Character
+    BEFFLAG      164-164   Character
+    LINK         166-167   Character
+    AFTINFO      169-208   Character
+    AFTFLAG      209-209   Character
+    REFERENCE    211-235   Character
+    COMMENT      236-315   Character
+    UPDCOM       316-346   Character
+    UPDDATE      348-354   Character
+    """
+
+    colspecs = []
+    header = []
+    types = {}
+    for iline in infos.splitlines():
+        if iline == '':
+            continue
+        ih = iline[0:11].strip().lower()
+        header.append(ih)
+        ii = int(iline[13:16]) - 1
+        ij = int(iline[17:20])
+        colspecs.append((ii, ij))
+        it = iline[22:].strip()
+        if it == 'Character':
+            it = 'str'
+        elif it == 'Real':
+            it = 'float'
+        else:
+            it = 'int'
+        types[ih] = it
+
+    data = pd.read_fwf(filename, colspecs=colspecs, header=None, dtype=types, names=header)
+    data = data.replace('nan', '')
+    data['date'] = pd.to_datetime((data.year * 1000000 +
+                                   np.where(data.month.values == 99, 6, data.month.values) * 10000 +
+                                   np.where(data.day.values == 99, 15, data.day.values) * 100 +
+                                   np.where(data.hour.values == 99, 0, data.hour.values)).apply(str), format='%Y%m%d%H')
+    return data
 
 
 __doc__ = """
@@ -601,7 +663,7 @@ I. OVERVIEW
 This file provides guidance for how to navigate the FTP directory for
 IGRA v2beta, the beta release of version 2 of the Integrated Global
 Radiosonde Archive. It provides a brief overview of what is new in IGRA 2,
-step-by-step instructions for downloading desired Data and metadata,
+step-by-step instructions for downloading desired Data and _metadata,
 and an explanation of the contents of the directory and all of its subdirectories.
 The formats of the various types of files available are described in
 separate documents.
@@ -754,15 +816,15 @@ IGRA 1.
     future article.
 
   - Additional Station History Information:
-    1. The IGRA metadata file, which contains documented information about
+    1. The IGRA _metadata file, which contains documented information about
        the instrumentation and observing practices at many stations, has been
        augmented with additional records extracted from the Gaffen (1996)
-       collection that formed the basis for the original IGRA metadata.
+       collection that formed the basis for the original IGRA _metadata.
        The additional records are for nearly 700 IGRA 2 stations for
        which no Data was available in IGRA 1.
     2. To provide information on instrumentation used in recent years for which
        documented station history information is not available in the IGRA
-       IGRA metadata file, the WMO Radiosonde/sounding system and measuring
+       IGRA _metadata file, the WMO Radiosonde/sounding system and measuring
        equipment codes contained in Global Telecommunications System messages
        are also supplied in separate files for the years 2000-2013. Note that
        these codes have not been checked for accuracy and are provided

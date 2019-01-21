@@ -3,6 +3,7 @@
 from ._helpers import *
 from ._calc import *
 from . import interp
+from ._ops import *
 
 
 """

@@ -158,8 +158,72 @@ def percentile(data, breaks, axis=0, percentilen=None, sample_size=130, borders=
     return data
 
 
+def percentile_reference_period(xdata, ydata, breaks, axis=0, percentilen=None, sample_size=130, ratio=False,
+                                ref_period=None, **kwargs):
+    """ Adjust a dataset based on a reference period and percentile matching
+
+    Args:
+        xdata (np.ndarray): Reference dataset
+        ydata (np.ndarray): Adjust dataset
+        breaks (list): Breakpoints if no reference period is refered to
+        axis (int): datetime dimension axis
+        percentilen (list): percentiles
+        sample_size (int): minimum sample size
+        ratio (bool):
+        ref_period (slice): indices for reference period
+        **kwargs:
+
+    Returns:
+        np.ndarray : ydata adjusted
+    """
+    if not isinstance(xdata, np.ndarray):
+        raise ValueError("requires a numpy array")
+    if not isinstance(ydata, np.ndarray):
+        raise ValueError("requires a numpy array")
+    if not isinstance(breaks, (list, np.ndarray)):
+        raise ValueError('requires a numpy array of list')
+
+    xdata = xdata.copy()
+    ydata = ydata.copy()
+    if percentilen is None:
+        percentilen = np.arange(0, 101, 10)
+
+    nq = len(percentilen)
+    sample_size = sample_size // nq
+    if sample_size < 3:
+        sample_size = 3
+
+    message('Sample size:', sample_size, 'N-Q:', nq, **kwargs)
+
+    dshape = xdata.shape
+    imax = dshape[axis]
+    breaks = np.sort(np.asarray(breaks))  # sort
+    breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
+    #
+    # 1. Adjust Reference to match distribution of unbiased period
+    #
+    isample = slice(0, imax)  # Everything
+    if ref_period is None:
+        iref = slice(breaks[-2], imax)  # Reference before 1st Breakpoint
+    else:
+        iref = ref_period
+    isample = idx2shp(isample, axis, dshape)
+    iref = idx2shp(iref, axis, dshape)
+    # Apply Dist. from xdata[iref] to all ydata  (Match dists.)
+    # s1 = xdata[iref]
+    # s2 = ydata[isample]
+    # dep = s1 - s2
+    ydata = dep.percentile_reference(xdata, ydata, iref, isample, percentilen,
+                                     axis=axis,
+                                     sample_size=sample_size,
+                                     max_sample=np.nan,
+                                     ratio=ratio,
+                                     return_ydata=True)
+    return ydata
+
+
 def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_size=130, borders=30, max_sample=1460,
-                         recent=False, ratio=False, ref_period=None, adjust_reference=True, **kwargs):
+                         recent=False, ratio=False, **kwargs):
     # xdata is RASO
     # ydata is Reference: ERA, CERA, JRA
     if not isinstance(xdata, np.ndarray):
@@ -188,23 +252,9 @@ def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_
     nb = breaks.size
 
     #
-    # 1. Adjust Reference to match distribution of unbiased period
+    # 1. Loop Breakpoints and adjust backwards using ydata as reference
+    # An Absolute ?
     #
-    if adjust_reference:
-        isample = slice(0, imax)  # Everything
-        if ref_period is None:
-            iref = slice(breaks[-2], imax)  # Reference before 1st Breakpoint
-
-        isample = idx2shp(isample, axis, dshape)
-        iref = idx2shp(iref, axis, dshape)
-        # Apply Dist. from xdata[iref] to all ydata  (Match dists.)
-        # s1 = xdata[iref]  # ydata[iref]
-        # s2 = ydata[sample] # xdata[sample]
-        # dep = s1 - s2
-        ydata = dep.percentile_reference(xdata, ydata, iref, isample, percentilen, axis=axis, sample_size=sample_size,
-                                         ratio=ratio, return_ydata=True)
-
-    # 2. Loop Breakpoints and adjust backwards using adjusted ydata as reference
     for i in range(nb - 2, 0, -1):
         # Indices
         im = breaks[i - 1]  # earlier
@@ -223,16 +273,19 @@ def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_
         before = np.nanmean(xdata[isample], axis=axis)
 
         # Use same sample for both data
-        xdata = dep.percentile_reference(xdata, ydata, isample, isample, percentilen, axis=axis,
+        xdata = dep.percentile_reference(xdata, ydata, isample, isample, percentilen,
+                                         axis=axis,
                                          sample_size=sample_size,
-                                         borders=borders, max_sample=max_sample, ratio=ratio)
+                                         borders=borders,
+                                         max_sample=max_sample,
+                                         ratio=ratio)
         # Debug infos
         if kwc('verbose', value=2, **kwargs):
             sdata = stats(xdata, iref, isample, axis=axis, a=before)
             sdata = np.array_str(sdata, precision=2, suppress_small=True)
             message(sdata, **kwu('level', 1, **kwargs))
 
-    return xdata, ydata
+    return xdata
 
 
 def idx2shp(idx, axis, shape):

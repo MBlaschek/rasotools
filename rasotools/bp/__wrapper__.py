@@ -415,19 +415,74 @@ adjustments these with a mean and a percentile adjustment going back in time.
 
     message(dict2str(params), **kwu('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
+    #
+    # Adjust reference to a reference period?
+    #
+    if adjust_reference:
+        avalues = adj.percentile_reference_period(values, avalues, breaks, axis=axis, percentilen=percentilen, **kwargs)
 
-    values, adjusted = adj.percentile_reference(values, avalues, breaks, axis=axis, percentilen=percentilen,
-                                                **kwargs)
+    values = adj.percentile_reference(values, avalues, breaks, axis=axis, percentilen=percentilen, **kwargs)
+
     data[name + suffix] = (data[name].dims, values)
     data[name + suffix].attrs.update(params)
     data[name + suffix].attrs['biascor'] = 'percentil_ref'
     data[name + suffix].attrs['standard_name'] = stdn + '_percentil_ref_adj'
     data[name + suffix].attrs['reference'] = adjname
 
-    data[name + suffix + '_ref'] = (data[name].dims, adjusted)
+    if adjust_reference:
+        data[name + suffix + '_ref'] = (data[name].dims, avalues)
+        data[name + suffix + '_ref'].attrs.update(params)
+        data[name + suffix + '_ref'].attrs['standard_name'] = stdn + '_percentil_ref'
+
+    return data
+
+
+def adjust_reference_period(data, name, adjname, breakname, dim='date', suffix='_qa', percentilen=None, **kwargs):
+    from . import adj
+    if not isinstance(data, Dataset):
+        raise ValueError("Requires a Dataset object", type(data))
+
+    if not isinstance(name, str):
+        raise ValueError("Requires a string name", type(name))
+
+    if name not in data.data_vars:
+        raise ValueError("data var not present")
+
+    if adjname not in data.data_vars:
+        raise ValueError("data var not present")
+
+    if breakname not in data.data_vars:
+        raise ValueError("requires a breaks data var")
+
+    if suffix is not None:
+        if suffix[0] != '_':
+            suffix = '_' + suffix
+            Warning('suffix needs an _. Added:', suffix)
+    else:
+        suffix = ''
+
+    if percentilen is None:
+        percentilen = np.arange(0, 101, 10)
+
+    values = data[name].values.copy()
+    avalues = data[adjname].values.copy()
+    breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
+    axis = data[name].dims.index(dim)
+    params = data[name].attrs.copy()  # deprecated (xr-patch)
+
+    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(percentilen), "Adj:", adjname, **kwargs)
+
+    params.update({'sample_size': kwargs.get('sample_size', 730),
+                   'borders': kwargs.get('borders', 180),
+                   'recent': int(kwargs.get('recent', False)),
+                   'ratio': int(kwargs.get('ratio', True))})
+
+    message(dict2str(params), **kwu('level', 1, **kwargs))
+    stdn = data[name].attrs.get('standard_name', name)
+    avalues = adj.percentile_reference_period(values, avalues, breaks, axis=axis, percentilen=percentilen, **kwargs)
+    data[name + suffix + '_ref'] = (data[name].dims, avalues)
     data[name + suffix + '_ref'].attrs.update(params)
     data[name + suffix + '_ref'].attrs['standard_name'] = stdn + '_percentil_ref'
-
     return data
 
 
@@ -558,6 +613,7 @@ var     2   4  4
 
     """
     import pandas as pd
+    from ..fun import rmse
     # for all reanalysis
     out = {}
     for i, iana in enumerate(analysis):

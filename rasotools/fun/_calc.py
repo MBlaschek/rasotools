@@ -38,7 +38,7 @@ def nancount(x, axis=0, keepdims=False):
     return np.sum(np.isfinite(x), axis=axis, keepdims=keepdims)
 
 
-def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False, args=()):
+def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False, fargs=()):
     """ Nan omitting function (numpy)
 
     Args:
@@ -57,11 +57,11 @@ def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False, ar
     import numpy as np
     if func is None:
         func = np.nanmean
+    return np.apply_along_axis(sample, axis, data, n, nmax, func, borders=borders, flip=flip, fargs=fargs)
 
-    return np.apply_along_axis(sample, axis, data, n, nmax, func, borders=borders, flip=flip, args=args)
 
-
-def sample(values, nmin, nmax, func, borders=0, flip=False, args=()):
+def sample(values, nmin, nmax, func, borders=0, flip=False, fargs=()):
+    # variable output, One value or array
     import numpy as np
     itx = np.isfinite(values)
     n = itx.sum()
@@ -70,18 +70,33 @@ def sample(values, nmin, nmax, func, borders=0, flip=False, args=()):
         if n > (nmax + borders):
             j = borders
         if flip:
-            return func(np.flip(values[itx])[j:(nmax + j)], *args)  # reversed
-        return func(values[itx][j:(nmax + j)], *args)  # normal
+            return func(np.flip(values[itx])[j:(nmax + j)], *fargs)  # reversed
+        return func(values[itx][j:(nmax + j)], *fargs)  # normal
 
     elif n < nmin:
-        return func(values, *args)*np.nan
+        return func(values, *fargs) * np.nan
 
     else:
         if n > (nmin * 2 + borders):
             j = borders
         if flip:
-            return func(np.flip(values[j:]), *args)
-        return func(values[j:], *args)
+            return func(np.flip(values[j:]), *fargs)
+        return func(values[j:], *fargs)
+
+
+def rmse(x, y, axis=None):
+    """ RMSE
+
+    Args:
+        x:
+        y:
+        axis:
+
+    Returns:
+        float : RMSE
+    """
+    import numpy as np
+    return np.sqrt(np.nanmean((x - y) * (x - y), axis=axis))
 
 
 def fuzzy_all(x, axis=0, thres=2):

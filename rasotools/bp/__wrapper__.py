@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 from xarray import Dataset, DataArray, set_options
+
 from ..fun import message, dict2str, kwu
 
-__all__ = ['apply_threshold', 'snht', 'adjust_mean', 'adjust_quantiles', 'adjust_quantiles_era',
+__all__ = ['apply_threshold', 'snht', 'adjust_mean', 'adjust_percentiles', 'adjust_percentiles_ref',
            'breakpoint_statistics', 'get_breakpoints', 'breakpoint_data']
 
 
@@ -188,7 +189,10 @@ def get_breakpoints(data, value=2, dim='date', var=None, return_startstop=False,
     dates = np.datetime_as_string(idata[dim].values, unit='D')
     e = []
     s = []
-    summe = idata.values.sum(axis=1 if axis == 0 else 0)
+    if idata.ndim > 1:
+        summe = idata.values.sum(axis=1 if axis == 0 else 0)
+    else:
+        summe = idata.values
     for k in i:
         l = np.where(summe[:k][::-1] <= startstop_min)[0][0]
         m = np.where(summe[k:] <= startstop_min)[0][0]
@@ -207,7 +211,7 @@ def get_breakpoints(data, value=2, dim='date', var=None, return_startstop=False,
     return i
 
 
-def adjust_mean(data, name, breakname, dim='date', dep_var=None, suffix='_m', **kwargs):
+def adjust_mean(data, name, breakname, dim='date', suffix='_m', **kwargs):
     """Detect and Correct Radiosonde biases from Departure Statistics
 Use ERA-Interim departures to detect breakpoints and
 adjustments these with a mean  adjustment going back in time.
@@ -218,13 +222,11 @@ adjustments these with a mean  adjustment going back in time.
         name (str): Name of variable to adjust
         breakname (str): Name of variable with breakpoint information
         dim (str): datetime dimension
-        dep_var (str): Name of variable to use as a departure
         suffix (str): add to name of new variables
 
     Optional Args:
         sample_size (int):  minimum Sample size [130]
         borders (int):  biased sample before and after a break [None]
-        bounded (tuple):  limit correction to bounds
         recent (bool):  Use all recent Data to adjustments
         ratio (bool):  Use ratio instead of differences
 
@@ -245,24 +247,15 @@ adjustments these with a mean  adjustment going back in time.
         raise ValueError("requires a breaks data var")
 
     idata = data[name].copy()
-
-    if dep_var is not None:
-        if dep_var not in data.data_vars:
-            raise ValueError("dep var not present", data.data_vars)
-
-        with set_options(keep_attrs=True):
-            idata = (idata - data[dep_var].reindex_like(idata))
-
     values = idata.values
     breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
     axis = idata.dims.index(dim)
     params = idata.attrs.copy()  # deprecated (xr-patch)
 
-    message(name, str(values.shape), 'A:', axis, "Dep:", str(dep_var), **kwargs)
+    message(name, str(values.shape), 'A:', axis, **kwargs)
 
     params.update({'sample_size': kwargs.get('sample_size', 730),
                    'borders': kwargs.get('borders', 180),
-                   'bounded': str(kwargs.get('bounded', '')),
                    'recent': int(kwargs.get('recent', False)),
                    'ratio': int(kwargs.get('ratio', True))})
 
@@ -281,10 +274,10 @@ adjustments these with a mean  adjustment going back in time.
     return data
 
 
-def adjust_quantiles(data, name, breakname, dim='date', dep_var=None, suffix='_q', quantilen=None, **kwargs):
+def adjust_percentiles(data, name, breakname, dim='date', dep_var=None, suffix='_q', percentilen=None, **kwargs):
     """Detect and Correct Radiosonde biases from Departure Statistics
 Use ERA-Interim departures to detect breakpoints and
-adjustments these with a mean and a quantile adjustment going back in time.
+adjustments these with a mean and a percentile adjustment going back in time.
 
 
     Args:
@@ -294,7 +287,7 @@ adjustments these with a mean and a quantile adjustment going back in time.
         dim (str): datetime dimension
         dep_var (str): Name of variable to use as a departure
         suffix (str): add to name of new variables
-        quantilen (list): quantiles for quantile_cor
+        percentilen (list): percentiles for percentile_cor
 
     Optional Args:
         sample_size (int):  minimum Sample size [130]
@@ -328,19 +321,18 @@ adjustments these with a mean and a quantile adjustment going back in time.
         with set_options(keep_attrs=True):
             idata = (idata - data[dep_var].reindex_like(idata))
 
-    if quantilen is None:
-        quantilen = np.arange(0, 101, 10)
+    if percentilen is None:
+        percentilen = np.arange(0, 101, 10)
 
     values = idata.values
     breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
     axis = idata.dims.index(dim)
     params = idata.attrs.copy()  # deprecated (xr-patch)
 
-    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(quantilen), "Dep:", str(dep_var), **kwargs)
+    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(percentilen), "Dep:", str(dep_var), **kwargs)
 
     params.update({'sample_size': kwargs.get('sample_size', 730),
                    'borders': kwargs.get('borders', 180),
-                   'bounded': str(kwargs.get('bounded', '')),
                    'recent': int(kwargs.get('recent', False)),
                    'ratio': int(kwargs.get('ratio', True))})
 
@@ -348,37 +340,34 @@ adjustments these with a mean and a quantile adjustment going back in time.
     stdn = data[name].attrs.get('standard_name', name)
 
     data[name + suffix] = (
-        idata.dims, adj.quantile(values, breaks, axis=axis, quantilen=quantilen, **kwargs))
+        idata.dims, adj.percentile(values, breaks, axis=axis, percentilen=percentilen, **kwargs))
     data[name + suffix].attrs.update(params)
-    data[name + suffix].attrs['biascor'] = 'quantil'
-    data[name + suffix].attrs['standard_name'] = stdn + '_quantil_adj'
+    data[name + suffix].attrs['biascor'] = 'percentil'
+    data[name + suffix].attrs['standard_name'] = stdn + '_percentil_adj'
 
     return data
 
 
-def adjust_quantiles_era(data, name, breakname, dim='date', dep_var=None, suffix=None, mean_cor=True, quantile_cor=True,
-                         quantile_adj=None, quantilen=None, **kwargs):
+def adjust_percentiles_ref(data, name, adjname, breakname, dim='date', suffix='_qa', percentilen=None,
+                           adjust_reference=True, **kwargs):
     """Detect and Correct Radiosonde biases from Departure Statistics
 Use ERA-Interim departures to detect breakpoints and
-adjustments these with a mean and a quantile adjustment going back in time.
+adjustments these with a mean and a percentile adjustment going back in time.
 
 
     Args:
         data (Dataset): Input Dataset with different variables
         name (str): Name of variable to adjust
+        adjname (str): Name of adjust variable
         breakname (str): Name of variable with breakpoint information
         dim (str): datetime dimension
-        dep_var (str): Name of variable to use as a departure
         suffix (str): add to name of new variables
-        mean_cor (bool): apply mean adjustments
-        quantile_cor (bool): apply quantil adjustments
-        quantile_adj (bool): apply quantil-ERA adjustments
-        quantilen (list): quantiles for quantile_cor
+        percentilen (list): percentilen
+        
 
     Optional Args:
         sample_size (int):  minimum Sample size [130]
         borders (int):  biased sample before and after a break [None]
-        bounded (tuple):  limit correction to bounds
         recent (bool):  Use all recent Data to adjustments
         ratio (bool):  Use ratio instead of differences
 
@@ -395,17 +384,11 @@ adjustments these with a mean and a quantile adjustment going back in time.
     if name not in data.data_vars:
         raise ValueError("data var not present")
 
+    if adjname not in data.data_vars:
+        raise ValueError("data var not present")
+
     if breakname not in data.data_vars:
         raise ValueError("requires a breaks data var")
-
-    idata = data[name].copy()
-
-    if dep_var is not None:
-        if dep_var not in data.data_vars:
-            raise ValueError("dep var not present", data.data_vars)
-
-        with set_options(keep_attrs=True):
-            idata = (idata - data[dep_var].reindex_like(idata))
 
     if suffix is not None:
         if suffix[0] != '_':
@@ -414,73 +397,62 @@ adjustments these with a mean and a quantile adjustment going back in time.
     else:
         suffix = ''
 
-    if quantilen is None:
-        quantilen = np.arange(0, 101, 10)
+    if percentilen is None:
+        percentilen = np.arange(0, 101, 10)
 
-    if quantile_adj is not None:
-        if quantile_adj not in data.data_vars:
-            raise ValueError("quantile_adj var not present", data.data_vars)
-
-        qadj = data[quantile_adj].reindex_like(idata)
-
-    values = idata.values
+    values = data[name].values.copy()
+    avalues = data[adjname].values.copy()
     breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
-    axis = idata.dims.index(dim)
-    params = idata.attrs.copy()  # deprecated (xr-patch)
+    axis = data[name].dims.index(dim)
+    params = data[name].attrs.copy()  # deprecated (xr-patch)
 
-    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(quantilen), "Dep:", str(dep_var), "Adj:",
-            str(quantile_adj), **kwargs)
+    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(percentilen), "Adj:", adjname, **kwargs)
 
     params.update({'sample_size': kwargs.get('sample_size', 730),
                    'borders': kwargs.get('borders', 180),
-                   'bounded': str(kwargs.get('bounded', '')),
                    'recent': int(kwargs.get('recent', False)),
                    'ratio': int(kwargs.get('ratio', True))})
 
     message(dict2str(params), **kwu('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
 
-    if mean_cor:
-        data[name + '_m' + suffix] = (idata.dims, adj.mean(values, breaks, axis=axis, **kwargs))
-        data[name + '_m' + suffix].attrs.update(params)
-        data[name + '_m' + suffix].attrs['biascor'] = 'mean'
-        data[name + '_m' + suffix].attrs['standard_name'] = stdn + '_mean_adj'
-
-    if quantile_cor:
-        data[name + '_q' + suffix] = (
-            idata.dims, adj.quantile(values, breaks, axis=axis, quantilen=quantilen, **kwargs))
-        data[name + '_q' + suffix].attrs.update(params)
-        data[name + '_q' + suffix].attrs['biascor'] = 'quantil'
-        data[name + '_q' + suffix].attrs['standard_name'] = stdn + '_quantil_adj'
-
-    if quantile_adj is not None:
-        qe_adj, qa_adj = adj.quantile_reference(values, qadj.values, breaks, axis=axis, quantilen=quantilen,
+    values, adjusted = adj.percentile_reference(values, avalues, breaks, axis=axis, percentilen=percentilen,
                                                 **kwargs)
-        data[name + '_qe' + suffix] = (idata.dims, qe_adj)
-        data[name + '_qe' + suffix].attrs.update(params)
-        data[name + '_qe' + suffix].attrs['biascor'] = 'quantil_era'
-        data[name + '_qe' + suffix].attrs['standard_name'] = stdn + '_quantil_era_adj'
+    data[name + suffix] = (data[name].dims, values)
+    data[name + suffix].attrs.update(params)
+    data[name + suffix].attrs['biascor'] = 'percentil_ref'
+    data[name + suffix].attrs['standard_name'] = stdn + '_percentil_ref_adj'
+    data[name + suffix].attrs['reference'] = adjname
 
-        data[name + '_adj' + suffix] = (idata.dims, qe_adj)
-        data[name + '_adj' + suffix].attrs.update(params)
-        data[name + '_adj' + suffix].attrs['biascor'] = 'quantil_era'
-        data[name + '_adj' + suffix].attrs['standard_name'] = stdn + '_quantil_era_adj'
-        data[name + '_adj' + suffix].attrs['standard_name'] = stdn + '_quantil_era_adj'
+    data[name + suffix + '_ref'] = (data[name].dims, adjusted)
+    data[name + suffix + '_ref'].attrs.update(params)
+    data[name + suffix + '_ref'].attrs['standard_name'] = stdn + '_percentil_ref'
 
     return data
 
 
+def apply_bounds(data, name, other, lower, upper):
+    "Apply bounds and replace"
+    logic = data[name].values < lower
+    n = np.sum(logic)
+    data[name].values = np.where(logic, data[other].values, data[name].values)
+    logic = data[name].values > upper
+    n += np.sum(logic)
+    data[name].values = np.where(logic, data[other].values, data[name].values)
+    print("Outside bounds [", lower, "|", upper, "] :", n)
+
+
 #
-# def correct_loop(data, dep_var=None, use_dep=False, mean_cor=False, quantile_cor=False, quantile_adj=None,
-#                  quantilen=None, clim_ano=True, **kwargs):
+# def correct_loop(data, dep_var=None, use_dep=False, mean_cor=False, percentile_cor=False, percentile_adj=None,
+#                  percentilen=None, clim_ano=True, **kwargs):
 #     funcid = "[DC] Loop "
 #     if not isinstance(data, DataArray):
 #         raise ValueError(funcid + "Requires a DataArray class object")
 #
-#     if not mean_cor and not quantile_cor and quantile_adj is None:
-#         raise RuntimeError(funcid + "Requires a correction: mean_cor, quantile_cor or quantile_adj")
+#     if not mean_cor and not percentile_cor and percentile_adj is None:
+#         raise RuntimeError(funcid + "Requires a correction: mean_cor, percentile_cor or percentile_adj")
 #
-#     if np.array([mean_cor, quantile_cor, quantile_adj is not None]).sum() > 1:
+#     if np.array([mean_cor, percentile_cor, percentile_adj is not None]).sum() > 1:
 #         raise RuntimeError(funcid + "Only one Method at a time is allowed!")
 #
 #     xdata = data.copy()
@@ -502,8 +474,8 @@ adjustments these with a mean and a quantile adjustment going back in time.
 #     i = 1
 #     while status:
 #         status, stest, breaks, xdata = adjustments(xdata, dep_var=dep_var, use_dep=use_dep, mean_cor=mean_cor,
-#                                                    quantile_cor=quantile_cor, quantile_adj=quantile_adj,
-#                                                    quantilen=quantilen, clim_ano=clim_ano,
+#                                                    percentile_cor=percentile_cor, percentile_adj=percentile_adj,
+#                                                    percentilen=percentilen, clim_ano=clim_ano,
 #                                                    **kwargs)
 #         # combine
 #         data.values = np.concatenate((data.values, np.expand_dims(xdata.values, axis=-1)), axis=-1)
@@ -538,21 +510,76 @@ adjustments these with a mean and a quantile adjustment going back in time.
 #         data.attrs['standard_name'] += '_mean_adj'
 #         data.attrs.set_items(params)
 #
-#     elif quantile_cor:
+#     elif percentile_cor:
 #         data.name += '_q_iter'
-#         data.attrs['biascor'] = 'quantile'
-#         data.attrs['standard_name'] += '_quantile_adj'
+#         data.attrs['biascor'] = 'percentile'
+#         data.attrs['standard_name'] += '_percentile_adj'
 #         data.attrs.set_items(params)
 #
-#     elif quantile_adj is not None:
+#     elif percentile_adj is not None:
 #         data.name += '_qe_iter'
-#         data.attrs['biascor'] = 'quantile_era_adjusted'
-#         data.attrs['standard_name'] += '_quantile_era_adj'
+#         data.attrs['biascor'] = 'percentile_era_adjusted'
+#         data.attrs['standard_name'] += '_percentile_era_adj'
 #         data.attrs.set_items(params)
 #     else:
 #         pass
 #
 #     return status, sdata, bdata, data
+
+
+def adjust_table(data, name, analysis, dim='date', **kwargs):
+    """
+    test
+Out[23]:
+{'dpd':       data
+ mean     2
+ rmse     3
+ var      2, 'era':       M  Q
+ mean -3 -3
+ rmse  2  2
+ var   4  4}
+
+    pd.concat(test, axis=1)
+Out[22]:
+      dpd era
+     data   M  Q
+mean    2  -3 -3
+rmse    3   2  2
+var     2   4  4
+
+    Args:
+        data:
+        name:
+        analysis:
+        dim:
+        **kwargs:
+
+    Returns:
+
+    """
+    import pandas as pd
+    # for all reanalysis
+    out = {}
+    for i, iana in enumerate(analysis):
+        tmp = data[[name, iana]].copy()
+        # snht
+        tmp = snht(tmp, dim=dim, var=name, dep=iana, **kwargs)
+        # threshold
+        tmp = apply_threshold(tmp, var=name + '_snht', dim=dim)
+        out[iana] = {}
+        out[iana]['n'] = len(get_breakpoints(tmp, dim=dim, var=name + '_snht_break'))
+        out[name] = {'data': {'RMSE': rmse(tmp[name], tmp[iana]),
+                              'MEAN': np.nanmean(tmp[name] - tmp[iana]),
+                              'VAR': np.nanvar(tmp[name] - tmp[iana])}}
+        # adjust
+        tmp = adjust_mean(tmp, name, name + '_snht_break', dim=dim, **kwargs)
+        out[iana]['mdiff'] = {'RMSE': rmse(tmp[name + '_m'], tmp[iana]),
+                              'MEAN': np.nanmean(tmp[name + '_m'] - tmp[iana]),
+                              'VAR': np.nanvar(tmp[name + '_m'] - tmp[iana])}
+
+    for ikey, idata in out.items():
+        out[ikey] = pd.Dataframe(idata)
+    return pd.concat(out, axis=1)
 
 
 def correct_2var(xdata, ydata):
@@ -608,7 +635,7 @@ def breakpoint_data(data, a, b, c, dim='date', borders=0, sample_size=130, max_s
                 # [ -max_sample ; -borders]
                 isample = slice(b - borders - max_sample, b - borders)
                 message("A [%d - %d - %d = %d - %d - %d = %d]" % (
-                b, borders, max_sample, isample.start, b, borders, isample.stop), **kwu('level',1, **kwargs))
+                    b, borders, max_sample, isample.start, b, borders, isample.stop), **kwu('level', 1, **kwargs))
 
     if (c - b) - borders > sample_size:
         iref = slice(b + borders, c)
@@ -659,7 +686,7 @@ def breakpoint_statistics(data, breakname, dim='date', agg='mean', borders=None,
 
     nb = len(ibreaks)
     if nb == 0:
-        message("Warning no Breakpoints found", **kwu('level',0, **kwargs))  # Always print
+        message("Warning no Breakpoints found", **kwu('level', 0, **kwargs))  # Always print
         return
 
     if borders is None:
@@ -689,7 +716,8 @@ def breakpoint_statistics(data, breakname, dim='date', agg='mean', borders=None,
     data['region'] = ('date', region)
     region = data['region'].copy()
     # Use regions to groupby and apply functions
-    data = eval("data.groupby('region').%s('%s')" % (agg, dim))
+    # data = eval("data.groupby('region').%s('%s')" % (agg, dim))
+    data = data.groupby('region').apply(nanfunc, args=(), )  # func, args, kwargs
     data = data.isel(region=data.region > 0)  # remove 0 region (to be excluded)
     return data, region.where(region > 0)
 
@@ -758,6 +786,11 @@ def reference_period(data, dim='date', dep_var=None, period=None, **kwargs):
     else:
         dep, _ = anomaly(data, dim=dim, period=period)
 
-    # find best matching period (lowest differences)
     #
+    # find best matching period (lowest differences)
+    # run SNHT
+    # Split into pieces
+    # run stats on each piece (RMSE)
+    # choose
+    # return piece + index
     return None

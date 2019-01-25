@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import numpy as np
+
 from ..fun import nanfunc
 
-__all__ = ['mean', 'quantile']
+__all__ = ['mean', 'percentile']
 
 
-def mean(data, sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, bounded=None, ratio=True,
+def mean(data, sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, ratio=True,
          median=False, **kwargs):
     """ Adjustment method using mean differences or ratios
 
@@ -21,43 +22,38 @@ def mean(data, sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=
         sample2 (tuple, slice): slice sample
         axis (int): date axis
         sample_size (int): minimum sample size
-        bounded (tuple): allowed variable range
         ratio (bool): use ratio or difference?
         median (bool): use median instead of mean?
+        borders (int): around breakpoint
+        max_sample (int): maximum sample size
 
     Returns:
         np.ndarray : mean adjusted data
     """
-
-    lbound, ubound = None, None
-    if bounded is not None:
-        lbound, ubound = bounded
-
     # minimum sample size, maximum sample size
     if median:
         s1 = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmedian, borders=borders)
-        s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmedian, borders=borders)
+        s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmedian, borders=borders,
+                     flip=True)
     else:
         s1 = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders)
-        s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders)
+        s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders,
+                     flip=True)
+
+    # print(np.array_str(np.array([range(len(s1)),s1, s2, s1 - s2]).T, precision=2, suppress_small=True))
 
     if ratio:
         # Todo factor amplifies extreme values
         dep = s1 / s2
         dep = np.where(np.isfinite(dep), dep, 1.)  # replace NaN with 1
-        sampleout = data[sample2] * dep
+        data[sample2] *= dep
     else:
         dep = s1 - s2
-        sampleout = data[sample2] + dep
-
-    if bounded is not None:
-        with np.errstate(invalid='ignore'):
-            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), data[sample2], sampleout)
-
-    return sampleout
+        data[sample2] += dep
+    return data
 
 
-def meanvar(data, sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, bounded=None, **kwargs):
+def meanvar(data, sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, **kwargs):
     """ Adjustment method using mean differences or ratios
 
     data[sampleout]  + (MEAN(data[sample1]) - MEAN(data[sample2]))
@@ -66,41 +62,30 @@ def meanvar(data, sample1, sample2, axis=0, sample_size=130, borders=0, max_samp
         data (np.ndarray): input data
         sample1 (tuple, slice): slice reference
         sample2 (tuple, slice): slice sample
-        sampleout (tuple, slice): slice output sample
         axis (int): date axis
         sample_size (int): minimum sample size
-        bounded (tuple): allowed variable range
+        borders (int): around breakpoint
+        max_sample (int): maximum sample size
 
     Returns:
         np.ndarray : mean adjusted data
     """
-
-    lbound, ubound = None, None
-    if bounded is not None:
-        lbound, ubound = bounded
-
     s1 = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders)
-    s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders)
+    s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanmean, borders=borders, flip=True)
     s1v = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanvar, borders=borders)
-    s2v = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanvar, borders=borders)
+    s2v = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanvar, borders=borders, flip=True)
 
     # MEAN
     dep = s1 - s2
-    sampleout = data[sample2] + dep
     # VAR
-    dep = np.divide(s1v, s2v, out=np.ones(s2v.shape), where=s2v != 0)
-    sampleout = data[sampleout] * dep
-
-    if bounded is not None:
-        with np.errstate(invalid='ignore'):
-            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), data[sample2], sampleout)
-
-    return sampleout
+    fac = np.divide(s1v, s2v, out=np.ones(s2v.shape), where=s2v != 0)
+    data[sample2] += (dep * fac)
+    return data
 
 
-def quantile(data, sample1, sample2, quantiles, axis=0, sample_size=130, borders=0, max_sample=1460, bounded=None,
-             ratio=True, **kwargs):
-    """ Adjustment method using quantile differences or ratios
+def percentile(data, sample1, sample2, percentiles, axis=0, sample_size=130, borders=0, max_sample=1460, ratio=True,
+               **kwargs):
+    """ Adjustment method using percentile differences or ratios
 
     ratio=False
     data[sample1] + ( percentiles(data[sample1]) - percentiles(data[sample2]) )
@@ -112,59 +97,56 @@ def quantile(data, sample1, sample2, quantiles, axis=0, sample_size=130, borders
         data (np.ndarray): input data
         sample1 (tuple, slice): slice reference
         sample2 (tuple, slice): slice sample
-        quantiles (list): percentiles to use
-        sampleout (tuple, slice): slice output sample
+        percentiles (list): percentiles to use
         axis (int): date axis
         sample_size (int): minimum sample size
-        bounded (tuple): allowed variable range
         ratio (bool): use ratio or difference?
+        borders (int): around breakpoint
+        max_sample (int): maximum sample size
 
     Returns:
         np.ndarray : percentile adjusted data
     """
-    lbound, ubound = None, None
-    if bounded is not None:
-        lbound, ubound = bounded
-
     # Add 0 and 100, and remove them
-    quantiles = np.unique(np.concatenate([[0], quantiles, [100]]))
-    quantiles = quantiles[1:-1]  # remove 0 and 100
+    percentiles = np.unique(np.concatenate([[0], percentiles, [100]]))
+    percentiles = percentiles[1:-1]  # remove 0 and 100
 
     # Sample sizes are enough?
-    nsample1 = np.isfinite(data[sample1]).sum(axis=axis) > sample_size
-    nsample2 = np.isfinite(data[sample2]).sum(axis=axis) > sample_size
+    # nsample1 = np.isfinite(data[sample1]).sum(axis=axis) > sample_size
+    # nsample2 = np.isfinite(data[sample2]).sum(axis=axis) > sample_size
 
     # Percentiles of the samples
-    s1 = np.nanpercentile(data[sample1], quantiles, axis=axis)
-    s2 = np.nanpercentile(data[sample2], quantiles, axis=axis)
+    # s1 = np.nanpercentile(data[sample1], percentiles, axis=axis)
+    # s2 = np.nanpercentile(data[sample2], percentiles, axis=axis)
+    s1 = nanfunc(data[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanpercentile, borders=borders,
+                 args=(percentiles,))
 
+    s2 = nanfunc(data[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanpercentile, borders=borders,
+                 args=(percentiles,))
     if ratio:
         # dep = np.where(sample2 != 0., sample1 / sample2, 1.)
         dep = np.divide(s1, s2, where=(s2 != 0), out=np.full(s2.shape, 1.))
-        dep = np.where(nsample1 & nsample2, dep, 1.)  # apply sample size
+        # dep = np.where(nsample1 & nsample2, dep, 1.)  # apply sample size
         dep = np.where(np.isfinite(dep), dep, 1.)  # replace NaN
     else:
         dep = s1 - s2
-        dep = np.where(nsample1 & nsample2, dep, 0.)  # apply sample size
+        # dep = np.where(nsample1 & nsample2, dep, 0.)  # apply sample size
+        dep = np.where(np.isfinite(dep), dep, 0.)
 
-    # Interpolate adjustments to sampleout shape and data
-    dep = apply_quantile_adjustments(data[sample2], s2, dep, axis=axis)
+        # Interpolate adjustments to sampleout shape and data
+    dep = apply_percentile_adjustments(data[sample2], s2, dep, axis=axis)
 
     if ratio:
-        sampleout = data[sample2] * dep
+        data[sample2] *= dep
     else:
-        sampleout = data[sample2] + dep
+        data[sample2] += dep
 
-    if bounded is not None:
-        with np.errstate(invalid='ignore'):
-            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), data[sample2], sampleout)
-
-    return sampleout
+    return data
 
 
-def quantile_reference(xdata, ydata, sample1, sample2, quantiles, axis=0, sample_size=130, max_sample=1460, borders=0, bounded=None,
-                       ratio=True, **kwargs):
-    """ Adjustment method using quantile differences or ratios
+def percentile_reference(xdata, ydata, sample1, sample2, percentiles, axis=0, sample_size=130, max_sample=1460,
+                         borders=0, ratio=True, return_ydata=False, **kwargs):
+    """ Adjustment method using percentile differences or ratios
 
     ratio=False
     xdata[sample1] + ( percentiles(xdata[sample1]) - percentiles(ydata[sample2]) )
@@ -177,7 +159,7 @@ def quantile_reference(xdata, ydata, sample1, sample2, quantiles, axis=0, sample
         ydata (np.ndarray): reference data
         sample1 (list, slice): slice reference
         sample2 (list, slice): slice sample
-        quantiles (list): percentiles to use
+        percentiles (list): percentiles to use
         axis (int): date axis
         sample_size (int): minimum sample size
         bounded (tuple): allowed variable range
@@ -186,56 +168,62 @@ def quantile_reference(xdata, ydata, sample1, sample2, quantiles, axis=0, sample
     Returns:
         np.ndarray : percentile adjusted data
     """
-    lbound, ubound = None, None
-    if bounded is not None:
-        lbound, ubound = bounded
-
     # Add 0 and 100, and remove them
-    quantiles = np.unique(np.concatenate([[0], quantiles, [100]]))
-    quantiles = quantiles[1:-1]  # remove 0 and 100
+    percentiles = np.unique(np.concatenate([[0], percentiles, [100]]))
+    percentiles = percentiles[1:-1]  # remove 0 and 100
 
     # Sample sizes are enough?
-    nsample1 = np.isfinite(xdata[sample1]).sum(axis=axis) > sample_size
-    nsample2 = np.isfinite(ydata[sample2]).sum(axis=axis) > sample_size
+    # nsample1 = np.isfinite(xdata[sample1]).sum(axis=axis) > sample_size
+    # nsample2 = np.isfinite(ydata[sample2]).sum(axis=axis) > sample_size
 
     # Percentiles of the samples
-    s1 = np.nanpercentile(xdata[sample1], quantiles, axis=axis)
-    s2 = np.nanpercentile(ydata[sample2], quantiles, axis=axis)
+    # s1 = np.nanpercentile(xdata[sample1], percentiles, axis=axis)
+    # s2 = np.nanpercentile(ydata[sample2], percentiles, axis=axis)
+    s1 = nanfunc(xdata[sample1], axis=axis, n=sample_size, nmax=max_sample, func=np.nanpercentile, borders=borders,
+                 args=(percentiles,))
+    s2 = nanfunc(ydata[sample2], axis=axis, n=sample_size, nmax=max_sample, func=np.nanpercentile, borders=borders,
+                 args=(percentiles,))
 
     if ratio:
         # dep = np.where(sample2 != 0., sample1 / sample2, 1.)
         dep = np.divide(s1, s2, where=(s2 != 0), out=np.full(s2.shape, 1.))
-        dep = np.where(nsample1 & nsample2, dep, 1.)  # apply sample size
+        # dep = np.where(nsample1 & nsample2, dep, 1.)  # apply sample size
         dep = np.where(np.isfinite(dep), dep, 1.)  # replace NaN
     else:
         dep = s1 - s2
-        dep = np.where(nsample1 & nsample2, dep, 0.)  # apply sample size
+        # dep = np.where(nsample1 & nsample2, dep, 0.)  # apply sample size
+        dep = np.where(np.isfinite(dep), dep, 0.)
 
-    # Interpolate adjustments to sampleout shape and data
-    dep = apply_quantile_adjustments(xdata[sample2], s2, dep, axis=axis)
+        # Interpolate adjustments to sampleout shape and data
+    dep = apply_percentile_adjustments(xdata[sample2], s2, dep, axis=axis)
 
-    if ratio:
-        sampleout = xdata[sample2] * dep
+    if return_ydata:
+        if ratio:
+            ydata[sample2] *= dep
+        else:
+            ydata[sample2] += dep
+
+        return ydata
     else:
-        sampleout = xdata[sample2] + dep
+        if ratio:
+            xdata[sample2] *= dep
+        else:
+            xdata[sample2] += dep
 
-    if bounded is not None:
-        with np.errstate(invalid='ignore'):
-            sampleout = np.where((sampleout < lbound) | (sampleout > ubound), xdata[sample2], sampleout)
-
-    return sampleout
+        return xdata
 
 
 #
 # Helper functions
 #
 
-def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
-    """ Helper Function for applying quantile adjustments
+
+def apply_percentile_adjustments(data, percentiles, adjustment, axis=0):
+    """ Helper Function for applying percentile adjustments
 
     Args:
         data (np.ndarray): data
-        quantiles (np.ndarray): quantiles, points of adjustments
+        percentiles (np.ndarray): percentiles, points of adjustments
         adjustment (np.ndarray): adjustments to be interpolated
         axis (int): axis of datetime
 
@@ -245,7 +233,7 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
     in_dims = list(range(data.ndim))
     # last dim == axis, Last dim should be time/date
     data = np.transpose(data, in_dims[:axis] + in_dims[axis + 1:] + [axis])
-    quantiles = np.transpose(quantiles, in_dims[:axis] + in_dims[axis + 1:] + [axis])
+    percentiles = np.transpose(percentiles, in_dims[:axis] + in_dims[axis + 1:] + [axis])
     adjustment = np.transpose(adjustment, in_dims[:axis] + in_dims[axis + 1:] + [axis])
     adjusts = np.zeros(data.shape)
     # Indices for iteration + expand
@@ -253,7 +241,7 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
     inds = (ind + (Ellipsis,) for ind in inds)  # add last as ':' == Ellipsis == all
     for ind in inds:
         # INTERP -> Xnew, Xpoints, Fpoints
-        adjusts[ind] = np.interp(data[ind], quantiles[ind], adjustment[ind])
+        adjusts[ind] = np.interp(data[ind], percentiles[ind], adjustment[ind])
 
     # Transform back to original shape
     return np.transpose(adjusts, in_dims[:axis] + in_dims[axis + 1:] + [axis])
@@ -263,7 +251,7 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #
 
 
-# def quantile_reference(xdata, ydata, subsample, sampleout, sample_size, quantiles, bounded=None,
+# def percentile_reference(xdata, ydata, subsample, sampleout, sample_size, percentiles, bounded=None,
 #                  ratio=True, verbose=0):
 #     lbound, ubound = None, None
 #     if bounded is not None:
@@ -278,19 +266,19 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #             itx[1] = i
 #             jtx[1] = i
 #             if ratio:
-#                 dep = quantile_era_ratio_1d(xdata[itx], ydata[itx], subsample, quantiles, sample_size)
+#                 dep = percentile_era_ratio_1d(xdata[itx], ydata[itx], subsample, percentiles, sample_size)
 #                 # dep = dep + (1 - dep) / factor if factor > 1 else dep
 #                 tmp_qad[jtx] = ydata[itx] * dep
 #             else:
-#                 dep = quantile_era_1d(xdata[itx], ydata[itx], subsample, quantiles, sample_size)
+#                 dep = percentile_era_1d(xdata[itx], ydata[itx], subsample, percentiles, sample_size)
 #                 tmp_qad[jtx] = ydata[itx] + dep  #/ factor  # one value per level (might be negativ)
 #     else:
 #         if ratio:
-#             dep = quantile_era_ratio_1d(xdata[itx], ydata[itx], subsample, quantiles, sample_size)
+#             dep = percentile_era_ratio_1d(xdata[itx], ydata[itx], subsample, percentiles, sample_size)
 #             # dep = dep + (1 - dep) / factor if factor > 1 else dep
 #             tmp_qad[jtx] = ydata[itx] * dep
 #         else:
-#             dep = quantile_era_1d(xdata[itx], ydata[itx], subsample, quantiles, sample_size)
+#             dep = percentile_era_1d(xdata[itx], ydata[itx], subsample, percentiles, sample_size)
 #             tmp_qad[jtx] = ydata[itx] + dep  #/ factor  # one value per level (might be negativ)
 #
 #     if bounded is not None:
@@ -303,7 +291,7 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     return tmp_qad
 
 #
-# def quantile_1d(x, sample1, sample2, meinequantilen, sample_size, sample3=None, return_mean=False, linear=True,
+# def percentile_1d(x, sample1, sample2, meinepercentilen, sample_size, sample3=None, return_mean=False, linear=True,
 #                 verbose=0):
 #     from support import qstats
 #     #
@@ -319,28 +307,28 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #             return np.zeros(s2d.shape)
 #     #
 #     # add 0 and 100 to remove them afterwards
-#     meinequantilen = np.unique(np.concatenate([[0], meinequantilen, [100]]))
-#     # Mean of quantile boxes( not 0 and 100 )
-#     count1, m1 = qstats(s1d, meinequantilen[1:-1], counts=3)
-#     count2, m2 = qstats(s2d, meinequantilen[1:-1], counts=3)
+#     meinepercentilen = np.unique(np.concatenate([[0], meinepercentilen, [100]]))
+#     # Mean of percentile boxes( not 0 and 100 )
+#     count1, m1 = qstats(s1d, meinepercentilen[1:-1], counts=3)
+#     count2, m2 = qstats(s2d, meinepercentilen[1:-1], counts=3)
 #     #
 #     if verbose > 1:
-#         print "Quantiles:", meinequantilen
+#         print "percentiles:", meinepercentilen
 #         print "Sample 1: ", count1
 #         print "Sample 2: ", count2
 #     #
-#     qb = np.nanpercentile(s1d, meinequantilen)  # truth
-#     qa = np.nanpercentile(s2d, meinequantilen)  # biased
+#     qb = np.nanpercentile(s1d, meinepercentilen)  # truth
+#     qa = np.nanpercentile(s2d, meinepercentilen)  # biased
 #     #
-#     diffs = qb - qa  # Difference of quantiles (1st and lst for interp)
-#     xp = qa  # x Punkte der Interpolation (Quantile Edges)
+#     diffs = qb - qa  # Difference of percentiles (1st and lst for interp)
+#     xp = qa  # x Punkte der Interpolation (percentile Edges)
 #     xp[:-1] = m2  # x Punkte der Interpolation
 #     diffs[:-1] = m1 - m2  # y punkte der interpolation
 #     if return_mean:
 #         return m1, m2
 #
-#     # interpolate quantile differences
-#     # we know the difference at quantile values and linearly interpolate this to all values
+#     # interpolate percentile differences
+#     # we know the difference at percentile values and linearly interpolate this to all values
 #     #
 #     # how to handle end-point ?
 #     # if not extrapolate:
@@ -366,8 +354,8 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     return np.where(np.isfinite(out), out, 0.)  # size of sample 2 or sample 3 # no adjustment
 #
 #
-# def quantile_ratio_1d(x, sample1, sample2, meinequantilen, sample_size, sample3=None, verbose=0):
-#     """ Quantile matching between Samples using ratio of quantiles
+# def percentile_ratio_1d(x, sample1, sample2, meinepercentilen, sample_size, sample3=None, verbose=0):
+#     """ percentile matching between Samples using ratio of percentiles
 #     adjustment = sample2 * interp. ( Q. of sample 1 / Q. of sample 2 )
 #     """
 #     s1d = x[sample1]  # truth (sample1)
@@ -383,17 +371,17 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     if not ok1 or not ok2:
 #         return np.ones(out.shape)  # only 1
 #
-#     meinequantilen = np.unique(np.concatenate([[0], meinequantilen, [100]]))  # add 0, 1 and 99, 100
-#     qb = np.nanpercentile(s1d, meinequantilen)  # [1:-1], interpolation='linear')       # truth   (1 to 99 %)
-#     qa = np.nanpercentile(s2d, meinequantilen)  # [1:-1], interpolation='linear')       # biased
-#     # ratio of quantiles (scale truth to biased)
+#     meinepercentilen = np.unique(np.concatenate([[0], meinepercentilen, [100]]))  # add 0, 1 and 99, 100
+#     qb = np.nanpercentile(s1d, meinepercentilen)  # [1:-1], interpolation='linear')       # truth   (1 to 99 %)
+#     qa = np.nanpercentile(s2d, meinepercentilen)  # [1:-1], interpolation='linear')       # biased
+#     # ratio of percentiles (scale truth to biased)
 #     with np.errstate(invalid='ignore', divide='ignore'):
 #         qdiff = np.where(qa > 0, qb / qa, qb)  # remove 0  Exception NullDivide
 #         qdiff = np.where(qb == 0, 1, qdiff)  # no 0 allowed
-#     return np.interp(out, qa, qdiff)  # interpolate quantile diff to all Data
+#     return np.interp(out, qa, qdiff)  # interpolate percentile diff to all Data
 #
 #
-# def quantile_era_1d(x, y, sample1, meinequantilen, sample_size, verbose=0):
+# def percentile_era_1d(x, y, sample1, meinepercentilen, sample_size, verbose=0):
 #     from support import qstats
 #     # Match ERA to RASO
 #     # Sampling Period:
@@ -406,11 +394,11 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #         return y
 #     #
 #     # add 0 and 100
-#     meinequantilen = np.unique(np.concatenate([[0], meinequantilen, [100]]))
+#     meinepercentilen = np.unique(np.concatenate([[0], meinepercentilen, [100]]))
 #     # Be sure to remove 0,100 now
-#     # Mean of quantile boxes( not 0 and 100 )
-#     count1, m1 = qstats(s1d, meinequantilen[1:-1])
-#     count2, m2 = qstats(s2d, meinequantilen[1:-1])
+#     # Mean of percentile boxes( not 0 and 100 )
+#     count1, m1 = qstats(s1d, meinepercentilen[1:-1])
+#     count2, m2 = qstats(s2d, meinepercentilen[1:-1])
 #     # ok1 = count1[:-1] > sample_size
 #     # ok2 = count2[:-1] > sample_size
 #     # # Enough Data to calculate ?
@@ -418,14 +406,14 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     #     return y  # np.zeros(y.shape)
 #     #
 #     if verbose > 1:
-#         print "Quantiles:", meinequantilen
+#         print "percentiles:", meinepercentilen
 #         print "Sample 1: ", count1
 #         print "Sample 2: ", count2
 #     #
-#     qb = np.nanpercentile(s1d, meinequantilen)  # truth
-#     qa = np.nanpercentile(s2d, meinequantilen)  # biased
+#     qb = np.nanpercentile(s1d, meinepercentilen)  # truth
+#     qa = np.nanpercentile(s2d, meinepercentilen)  # biased
 #     #
-#     diffs = qb - qa  # Difference of quantiles (1st and lst for interp)
+#     diffs = qb - qa  # Difference of percentiles (1st and lst for interp)
 #     xp = qa
 #     xp[:-1] = m2  # x punkte der interpolation ( ? NAN )
 #     diffs[:-1] = m1 - m2  # y punkte der interpolation
@@ -436,7 +424,7 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     return out  # size of y
 #
 #
-# def quantile_era_ratio_1d(x, y, sample1, meinequantilen, sample_size, verbose=0):
+# def percentile_era_ratio_1d(x, y, sample1, meinepercentilen, sample_size, verbose=0):
 #     s1d = x[sample1]  # truth (sample1)
 #     s2d = y[sample1]  # biased (sample2)
 #     # ? sample_size ?
@@ -445,12 +433,12 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     if not ok1 or not ok2:
 #         return np.ones(y.shape)  # only 1
 #
-#     meinequantilen = np.unique(np.concatenate([[0], meinequantilen, [100]]))  # add 0, 1 and 99, 100
-#     qb = np.nanpercentile(s1d, meinequantilen)  # [1:-1], interpolation='linear')       # truth   (1 to 99 %)
-#     qa = np.nanpercentile(s2d, meinequantilen)  # [1:-1], interpolation='linear')       # biased
+#     meinepercentilen = np.unique(np.concatenate([[0], meinepercentilen, [100]]))  # add 0, 1 and 99, 100
+#     qb = np.nanpercentile(s1d, meinepercentilen)  # [1:-1], interpolation='linear')       # truth   (1 to 99 %)
+#     qa = np.nanpercentile(s2d, meinepercentilen)  # [1:-1], interpolation='linear')       # biased
 #     qdiff = np.where(qa > 0, qb / qa, qb)  # remove 0  Exception NullDivide
 #     qdiff = np.where(qb == 0, 1, qdiff)  # no 0 allowed
-#     return np.interp(y, qa, qdiff)  # interpolate quantile diff to all Data
+#     return np.interp(y, qa, qdiff)  # interpolate percentile diff to all Data
 #
 #
 # def print_stuff(name, nref, nsam, m1, m2, m3, dep, test, sample_size, verbose):
@@ -484,7 +472,7 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 
 # works terribly
 # interpolate bin-means, difference then
-# def qmap_mean_departure(x, sample1, sample2, meinequantilen, sample_size,
+# def qmap_mean_departure(x, sample1, sample2, meinepercentilen, sample_size,
 #                         return_mean=False, linear=True):
 #     from support import qstats
 #
@@ -492,16 +480,16 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     s2d = x[sample2]  # biased (sample2)
 #
 #     # add 0 and 100
-#     meinequantilen = np.unique(np.concatenate([[0], meinequantilen, [100]]))
+#     meinepercentilen = np.unique(np.concatenate([[0], meinepercentilen, [100]]))
 #
-#     qb = np.nanpercentile(s1d, meinequantilen)  # truth
-#     qa = np.nanpercentile(s2d, meinequantilen)  # biased
+#     qb = np.nanpercentile(s1d, meinepercentilen)  # truth
+#     qa = np.nanpercentile(s2d, meinepercentilen)  # biased
 #     mean1 = np.copy(qb)
 #     mean2 = np.copy(qa)
 #
-#     # Mean of quantile boxes( not 0 and 100 )
-#     count1, m1 = qstats(s1d, meinequantilen[1:-1], counts=sample_size)
-#     count2, m2 = qstats(s2d, meinequantilen[1:-1], counts=sample_size)
+#     # Mean of percentile boxes( not 0 and 100 )
+#     count1, m1 = qstats(s1d, meinepercentilen[1:-1], counts=sample_size)
+#     count2, m2 = qstats(s2d, meinepercentilen[1:-1], counts=sample_size)
 #     # only missing ?
 #     mean1[:-1] = m1
 #     mean2[:-1] = m2
@@ -521,16 +509,16 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     return m1d - m2d  # one value
 
 
-# def qmap_var_departure(x, y, sample1, sample2, meinequantilen, sample_size, verbose=0):
-#     """ Quantile matching with secondary variable
+# def qmap_var_departure(x, y, sample1, sample2, meinepercentilen, sample_size, verbose=0):
+#     """ percentile matching with secondary variable
 #
 #     Parameters
 #     ----------
-#     x               Variable to match quantiles
-#     y               Variable to calc. quantiles
+#     x               Variable to match percentiles
+#     y               Variable to calc. percentiles
 #     sample1
 #     sample2
-#     meinequantilen
+#     meinepercentilen
 #     sample_size
 #     verbose
 #
@@ -544,12 +532,12 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     s2d = y[sample2]  # biased (sample2)
 #     s2dx = x[sample2]
 #
-#     q1 = np.nanpercentile(s1d, meinequantilen)  # truth
-#     q2 = np.nanpercentile(s2d, meinequantilen)  # biased
+#     q1 = np.nanpercentile(s1d, meinepercentilen)  # truth
+#     q2 = np.nanpercentile(s2d, meinepercentilen)  # biased
 #
-#     nq = len(meinequantilen) + 1
+#     nq = len(meinepercentilen) + 1
 #
-#     # index of Data in quantile ranges
+#     # index of Data in percentile ranges
 #     index_s1 = np.digitize(s1d, q1)
 #     index_s2 = np.digitize(s2d, q2)
 #
@@ -568,7 +556,7 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     for ibin in np.arange(nq):
 #         m2 = np.nanmean(s2dx[index_s2 == ibin])  # biased
 #         if (s2_counts[ibin] > sample_size) & (s1_counts[ibin] > sample_size):
-#             # Average(func) of that Quantile Range
+#             # Average(func) of that percentile Range
 #             m1 = np.nanmean(s1dx[index_s1 == ibin])  # truth
 #
 #             # new[ index_s3 == ibin ] = m1 - m2 # apply difference to all
@@ -581,13 +569,13 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 
 
 #
-# def qmap_departure_mod(x, sample1, sample2, meinequantilen, sample_size,
+# def qmap_departure_mod(x, sample1, sample2, meinepercentilen, sample_size,
 #                        sample3=None, return_mean=False, linear=True,
 #                        verbose=0):
 #     # check if there is an anomaly like dpd30
 #     # remove these values -> make sure we adjustments the histogram for it
 #     #
-#     # Differenz between quantiles -> estimate if there is huge bias
+#     # Differenz between percentiles -> estimate if there is huge bias
 #     # or have a lot of Data in one class ?
 #     # adjust only comparable samples
 #     from support import qstats
@@ -596,11 +584,11 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #     s2d = x[sample2]  # biased (sample2)
 #     #
 #     # add 0 and 100
-#     meinequantilen = np.unique(np.concatenate([[0], meinequantilen, [100]]))
+#     meinepercentilen = np.unique(np.concatenate([[0], meinepercentilen, [100]]))
 #     # Be sure to remove 0,100 now
-#     # Mean of quantile boxes( not 0 and 100 )
-#     count1, m1 = qstats(s1d, meinequantilen[1:-1], counts=sample_size)
-#     count2, m2 = qstats(s2d, meinequantilen[1:-1], counts=sample_size)
+#     # Mean of percentile boxes( not 0 and 100 )
+#     count1, m1 = qstats(s1d, meinepercentilen[1:-1], counts=sample_size)
+#     count2, m2 = qstats(s2d, meinepercentilen[1:-1], counts=sample_size)
 #     ok1 = count1[:-1] > sample_size
 #     ok2 = count2[:-1] > sample_size
 #     # Enough Data to calculate ?
@@ -611,20 +599,20 @@ def apply_quantile_adjustments(data, quantiles, adjustment, axis=0):
 #             return np.zeros(s2d.shape)
 #     #
 #     if verbose > 1:
-#         print "Quantiles:", meinequantilen
+#         print "percentiles:", meinepercentilen
 #         print "Sample 1: ", count1
 #         print "Sample 2: ", count2
 #     #
-#     qb = np.nanpercentile(s1d, meinequantilen)  # truth
-#     qa = np.nanpercentile(s2d, meinequantilen)  # biased
+#     qb = np.nanpercentile(s1d, meinepercentilen)  # truth
+#     qa = np.nanpercentile(s2d, meinepercentilen)  # biased
 #     #
-#     diffs = qb - qa  # Difference of quantiles (1st and lst for interp)
+#     diffs = qb - qa  # Difference of percentiles (1st and lst for interp)
 #     xp = qa
 #     xp[:-1] = m2  # x punkte der interpolation ( ? NAN )
 #     diffs[:-1] = m1 - m2  # y punkte der interpolation
 #     if return_mean:
 #         return m1, m2
-#     # interpolate quantile differences
+#     # interpolate percentile differences
 #     # how to handle end-point ?
 #     # if not extrapolate:
 #     #     diffs = diffs[1:-1] # trim

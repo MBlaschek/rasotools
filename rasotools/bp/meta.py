@@ -19,7 +19,7 @@ def location_change(lon, lat, dim='date', ilon=None, ilat=None, **kwargs):
     """
     import numpy as np
     from xarray import DataArray, full_like
-    from ..fun import distance, message
+    from ..fun import distance
 
     # count occurence of each coordinate pair
     # use the most common (also the most recent?)
@@ -71,7 +71,6 @@ def sondetype(data, dim='date', missing=None, **kwargs):
     import numpy as np
     from .adj import idx2shp
     from xarray import DataArray, full_like
-    from ..fun import message
 
     if not isinstance(data, DataArray):
         raise ValueError('requires a DataArray', type(data))
@@ -125,7 +124,7 @@ def metadata(ident, dates, igra=None, wmo=None, return_dataframes=False, **kwarg
     igra_id = False
     if isinstance(ident, str):
         if len(ident) > 6:
-            igra_id=True
+            igra_id = True
     else:
         ident = "%06d" % ident
 
@@ -154,12 +153,12 @@ def metadata(ident, dates, igra=None, wmo=None, return_dataframes=False, **kwarg
         iwmo.loc[slice(row[1]['start'], row[1]['stop'])] = row[1]['c']
 
     print(iwmo.sum())
-    data = pd.concat([event, iwmo], axis=1, keys=['igra_event', 'wmo_type'])
-    data['wmo_type'] = data['wmo_type'].replace(0, np.nan)
-    data['wmo_type'] = data['wmo_type'].replace(-1, np.nan)
-    data['wmo_type'] = data['wmo_type'].bfill().ffill()
-    data['wmo_event'] = 0
-    data.loc[1:, 'wmo_event'] = (np.diff(data.wmo_type.values) != 0).astype(int)
+    data = pd.concat([event, iwmo], axis=1, keys=['event_igra', 'sondetype_wmo'])
+    data['sondetype_wmo'] = data['sondetype_wmo'].replace(0, np.nan)
+    data['sondetype_wmo'] = data['sondetype_wmo'].replace(-1, np.nan)
+    data['sondetype_wmo'] = data['sondetype_wmo'].bfill().ffill()
+    data['event_wmo'] = 0
+    data.loc[1:, 'event_wmo'] = (np.diff(data.sondetype_wmo.values) != 0).astype(int)
     data.index.name = 'date'
     data = data.to_xarray()
     if return_dataframes:
@@ -179,4 +178,3 @@ def wmo_code_table():
     from .. import get_data
 
     return pd.read_csv(get_data('Common_C02_20181107_en.txt'))
-

@@ -2,13 +2,13 @@
 import numpy as np
 
 from . import dep
-from ..fun import message, nancount, kwc, kwu
+from ..fun import message, nancount, kwc, kwu, sample
 
-__all__ = ['mean', 'quantile', 'quantile_reference']
+__all__ = ['mean', 'percentile', 'percentile_reference']
 
 
-def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bounded=None, recent=False, ratio=True,
-         **kwargs):
+def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, recent=False, ratio=False,
+         meanvar=False, **kwargs):
     """ Mean Adjustment of breakpoints
 
     Args:
@@ -18,9 +18,9 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bou
         sample_size (int): minimum sample size
         borders (int): adjust breaks with borders
         max_sample (int): maximum sample size
-        bounded (tuple): variable allowed range
         recent (bool): use full reference period
         ratio (bool): calculate ratio, instead of difference
+        meanvar (bool): mean and var
         **kwargs:
 
     Returns:
@@ -35,18 +35,20 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bou
     dshape = data.shape  # Shape of data (date x levs)
     imax = dshape[axis]  # maximum index
     breaks = np.sort(np.asarray(breaks))  # sort
-    breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
+    breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... Max
     nb = breaks.size
+    # print(breaks)
 
-    for i in reversed(range(1, nb - 1)):
+    for i in range(nb - 2, 0, -1):
         # Indices
         im = breaks[i - 1]  # earlier
         ib = breaks[i]  # current breakpoint
         if recent:
-            ip = imax
+            ip = imax  # Max
         else:
             ip = breaks[i + 1]  # later
 
+        # print(i, im, ib)
         # Slices all axes
         iref = slice(ib, ip)
         isample = slice(im, ib)
@@ -55,8 +57,29 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bou
         # Before Adjustments
         before = np.nanmean(data[isample], axis=axis)
         # Apply Adjustments
-        data[isample] = dep.mean(data, iref, isample, axis=axis, sample_size=sample_size, max_sample=max_sample,
-                                 borders=borders, bounded=bounded, ratio=ratio)
+        # print(i, isample, iref)
+        # adjust data ?
+        if meanvar:
+            data = dep.meanvar(data, iref, isample, axis=axis, sample_size=sample_size, max_sample=max_sample,
+                               borders=borders, **kwargs)
+        else:
+            data = dep.mean(data, iref, isample, axis=axis, sample_size=sample_size, max_sample=max_sample,
+                            borders=borders, ratio=ratio, **kwargs)
+        #
+        # Border zone (- borders, + borders)
+        #
+        if borders > 0:
+            left = slice(ib - borders, ib)
+            right = slice(ib, ib + borders)
+            left = idx2shp(left, axis, dshape)
+            right = idx2shp(right, axis, dshape)
+            if meanvar:
+                data = dep.meanvar(data, iref, left, axis=axis, sample_size=3, borders=0, **kwargs)
+                data = dep.meanvar(data, iref, right, axis=axis, sample_size=3, borders=0, **kwargs)
+            else:
+                data = dep.mean(data, iref, left, axis=axis, sample_size=3, borders=0, ratio=ratio, **kwargs)
+                data = dep.mean(data, iref, right, axis=axis, sample_size=3, borders=0, ratio=ratio, **kwargs)
+
         # Debug infos
         if kwc('verbose', value=2, **kwargs):
             sdata = stats(data, iref, isample, axis=axis, a=before)
@@ -65,19 +88,18 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, bou
     return data
 
 
-def quantile(data, breaks, axis=0, quantilen=None, sample_size=130, borders=30, max_sample=1460, bounded=None,
-             recent=False, ratio=True, **kwargs):
+def percentile(data, breaks, axis=0, percentilen=None, sample_size=130, borders=30, max_sample=1460,
+               recent=False, ratio=False, **kwargs):
     """ Percentile Adjustment of breakpoints
 
     Args:
         data (array): radiosonde data
         breaks (list): breakpoint indices
         axis (int): axis of datetime dimension
-        quantilen (list): percentile ranges
+        percentilen (list): percentile ranges
         sample_size (int): minimum sample size
         borders (int): adjust breaks with borders
         max_sample (int): maximum sample size
-        bounded (tuple): variable allowed range
         recent (bool): use full reference period
         ratio (bool): calculate ratio, instead of difference
         **kwargs:
@@ -92,8 +114,15 @@ def quantile(data, breaks, axis=0, quantilen=None, sample_size=130, borders=30, 
         raise ValueError('requires a numpy array of list')
 
     data = data.copy()
-    if quantilen is None:
-        quantilen = np.arange(0, 101, 10)
+    if percentilen is None:
+        percentilen = np.arange(0, 101, 10)
+
+    nq = len(percentilen)
+    sample_size = sample_size // nq
+    if sample_size < 3:
+        sample_size = 3
+
+    message('Sample size:', sample_size, 'N-Q:', nq, **kwargs)
 
     dshape = data.shape
     imax = dshape[axis]
@@ -101,25 +130,25 @@ def quantile(data, breaks, axis=0, quantilen=None, sample_size=130, borders=30, 
     breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
     nb = breaks.size
 
-    for i in reversed(range(1, nb - 1)):
+    for i in range(nb - 2, 0, -1):
         # Indices
         im = breaks[i - 1]  # earlier
         ib = breaks[i]  # current breakpoint
         if recent:
-            ip = imax
+            ip = imax  # Max
         else:
             ip = breaks[i + 1]  # later
 
         # slices all axes
-        ibiased = slice(im, ib)
+        iref = slice(ib, ip)
         isample = slice(im, ib)
         isample = idx2shp(isample, axis, dshape)
         iref = idx2shp(iref, axis, dshape)
 
         before = np.nanmean(data[isample], axis=axis)
         # Apply Adjustments
-        data[ibiased] = dep.quantile(data, iref, isample, quantilen, axis=axis, sample_size=sample_size,
-                                     max_sample=max_sample, borders=borders, bounded=bounded, ratio=ratio)
+        data = dep.percentile(data, iref, isample, percentilen, axis=axis, sample_size=sample_size,
+                              max_sample=max_sample, borders=borders, ratio=ratio)
         # Debug infos
         if kwc('verbose', value=2, **kwargs):
             sdata = stats(data, iref, isample, axis=axis, a=before)
@@ -129,10 +158,10 @@ def quantile(data, breaks, axis=0, quantilen=None, sample_size=130, borders=30, 
     return data
 
 
-def quantile_reference(xdata, ydata, breaks, axis=0, quantilen=None, sample_size=365, borders=30, max_sample=1460,
-                       bounded=None, recent=False, ratio=True, ref_period=None, adjust_reference=True, **kwargs):
+def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_size=130, borders=30, max_sample=1460,
+                         recent=False, ratio=False, ref_period=None, adjust_reference=True, **kwargs):
     # xdata is RASO
-    # ydata is Reference
+    # ydata is Reference: ERA, CERA, JRA
     if not isinstance(xdata, np.ndarray):
         raise ValueError("requires a numpy array")
     if not isinstance(ydata, np.ndarray):
@@ -142,42 +171,66 @@ def quantile_reference(xdata, ydata, breaks, axis=0, quantilen=None, sample_size
 
     xdata = xdata.copy()
     ydata = ydata.copy()
-    if quantilen is None:
-        quantilen = np.arange(0, 101, 10)
+    if percentilen is None:
+        percentilen = np.arange(0, 101, 10)
 
-    breaks = np.sort(np.asarray(breaks))
-    nb = len(breaks)
-    imax = xdata.shape[axis]
-    # Last Breakpoint
-    if (breaks[-1] + sample_size) > imax:
-        message(Warning("Reference Data set is shorter than 1 year"))
+    nq = len(percentilen)
+    sample_size = sample_size // nq
+    if sample_size < 3:
+        sample_size = 3
 
+    message('Sample size:', sample_size, 'N-Q:', nq, **kwargs)
+
+    dshape = xdata.shape
+    imax = dshape[axis]
+    breaks = np.sort(np.asarray(breaks))  # sort
+    breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
+    nb = breaks.size
+
+    #
+    # 1. Adjust Reference to match distribution of unbiased period
+    #
     if adjust_reference:
-        all_period = [slice(None)] * xdata.ndim
-        # 1. Adjust Reference to match distribution of unbiased period
+        isample = slice(0, imax)  # Everything
         if ref_period is None:
-            ref_period = all_period[:]  # copy
-            ref_period[axis] = slice(breaks[-1], None)
-        else:
-            if isinstance(ref_period, (slice, list)):
-                iref_period = all_period[:]  # copy
-                iref_period[axis] = ref_period
-                ref_period = iref_period
-            else:
-                raise ValueError('Reference period needs to be a list or slice')
+            iref = slice(breaks[-2], imax)  # Reference before 1st Breakpoint
 
-        # Apply Dist. from xdata[ref_period] to all ydata  (Match dists.)
-        ydata = dep.quantile_reference(ydata, xdata, tuple(all_period), tuple(ref_period), quantilen, axis=axis,
-                                       sampleout=slice(None), sample_size=sample_size, bounded=bounded, ratio=ratio)
+        isample = idx2shp(isample, axis, dshape)
+        iref = idx2shp(iref, axis, dshape)
+        # Apply Dist. from xdata[iref] to all ydata  (Match dists.)
+        # s1 = xdata[iref]  # ydata[iref]
+        # s2 = ydata[sample] # xdata[sample]
+        # dep = s1 - s2
+        ydata = dep.percentile_reference(xdata, ydata, iref, isample, percentilen, axis=axis, sample_size=sample_size,
+                                         ratio=ratio, return_ydata=True)
 
     # 2. Loop Breakpoints and adjust backwards using adjusted ydata as reference
-    for ib in reversed(range(nb)):
-        ibiased, isample, iref = index_samples(breaks, ib, axis, xdata.shape, recent=recent, sample_size=sample_size,
-                                               borders=borders, max_sample=max_sample)
+    for i in range(nb - 2, 0, -1):
+        # Indices
+        im = breaks[i - 1]  # earlier
+        ib = breaks[i]  # current breakpoint
+        if recent:
+            ip = imax  # Max
+        else:
+            ip = breaks[i + 1]  # later
 
-        # Use same time sample for both data
-        xdata[ibiased] = dep.quantile_reference(xdata, ydata, isample, isample, quantilen, axis=axis, sampleout=ibiased,
-                                                sample_size=sample_size, bounded=bounded, ratio=ratio)
+        # slices all axes
+        iref = slice(ib, ip)
+        isample = slice(im, ib)
+        isample = idx2shp(isample, axis, dshape)
+        iref = idx2shp(iref, axis, dshape)
+
+        before = np.nanmean(xdata[isample], axis=axis)
+
+        # Use same sample for both data
+        xdata = dep.percentile_reference(xdata, ydata, isample, isample, percentilen, axis=axis,
+                                         sample_size=sample_size,
+                                         borders=borders, max_sample=max_sample, ratio=ratio)
+        # Debug infos
+        if kwc('verbose', value=2, **kwargs):
+            sdata = stats(xdata, iref, isample, axis=axis, a=before)
+            sdata = np.array_str(sdata, precision=2, suppress_small=True)
+            message(sdata, **kwu('level', 1, **kwargs))
 
     return xdata, ydata
 
@@ -194,9 +247,11 @@ def stats(data, ref, sample, axis=0, a=None):
     s = np.nanmean(data[sample], axis=axis)
     rn = nancount(data[ref], axis=axis)
     r = np.nanmean(data[ref], axis=axis)
+    n = np.squeeze(np.arange(0, np.size(sn)))
     if a is not None:
-        return np.array([sn, a, s, r - s, r, rn]).T
-    return np.array([sn, s, r - s, r, rn]).T
+        # counts, before, sample, diff, ref, counts
+        return np.array([n, sn, a, r - a, s, r - s, r, rn]).T
+    return np.array([n, sn, s, r - s, r, rn]).T
 
 # def index_samples(breaks, ibreak, axis, dshape, recent=False, sample_size=130, borders=30, max_sample=1460):
 #     """ Apply Breakpoints to data shape, return index lists

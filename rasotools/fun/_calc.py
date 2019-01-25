@@ -38,7 +38,7 @@ def nancount(x, axis=0, keepdims=False):
     return np.sum(np.isfinite(x), axis=axis, keepdims=keepdims)
 
 
-def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False):
+def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False, args=()):
     """ Nan omitting function (numpy)
 
     Args:
@@ -49,7 +49,7 @@ def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False):
         borders (int): border sample to ignore
         func (callable): function to call
         flip (bool): reverse data before applying the function
-
+        args (tuple): function arguments
 
     Returns:
         np.ndarray : func of values at axis, with sample size, borders and maximum
@@ -57,10 +57,11 @@ def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False):
     import numpy as np
     if func is None:
         func = np.nanmean
-    return np.apply_along_axis(sample, axis, data, n, nmax, func, borders=borders, flip=flip)
+
+    return np.apply_along_axis(sample, axis, data, n, nmax, func, borders=borders, flip=flip, args=args)
 
 
-def sample(values, nmin, nmax, func, borders=0, flip=False):
+def sample(values, nmin, nmax, func, borders=0, flip=False, args=()):
     import numpy as np
     itx = np.isfinite(values)
     n = itx.sum()
@@ -69,18 +70,18 @@ def sample(values, nmin, nmax, func, borders=0, flip=False):
         if n > (nmax + borders):
             j = borders
         if flip:
-            return func(np.flip(values[itx])[j:(nmax + j)])  # reversed
-        return func(values[itx][j:(nmax + j)])  # normal
+            return func(np.flip(values[itx])[j:(nmax + j)], *args)  # reversed
+        return func(values[itx][j:(nmax + j)], *args)  # normal
 
     elif n < nmin:
-        return np.nan
+        return func(values, *args)*np.nan
 
     else:
         if n > (nmin * 2 + borders):
             j = borders
         if flip:
-            return func(np.flip(values[j:]))
-        return func(values[j:])
+            return func(np.flip(values[j:]), *args)
+        return func(values[j:], *args)
 
 
 def fuzzy_all(x, axis=0, thres=2):

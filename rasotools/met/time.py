@@ -461,11 +461,11 @@ def covariance(x, y, dim='date', period=None):
 #
 
 
-def standard_sounding_times(data, dim='date', times=(0, 12), span=12, freq='12h', **kwargs):
+def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h', return_indices=False, **kwargs):
     import numpy as np
     import pandas as pd
     from xarray import DataArray
-    from ..fun import message
+    from ..fun import message, kwu
 
     kwargs['mname'] = kwargs.get('mname', 'std_hours')
 
@@ -482,49 +482,63 @@ def standard_sounding_times(data, dim='date', times=(0, 12), span=12, freq='12h'
                              pd.Timestamp(dates.max()).replace(hour=np.max(times), minute=0, second=0), freq=freq)
 
     message("New Index:", alldates, **kwargs)
-    # implicit copy
-    new = data.reindex(**{dim: alldates})  # complete reindex to new dates
-    new['delay'] = (dim, np.zeros(alldates.size))
+    new = data.reindex(**{dim: alldates})  # complete reindex to new dates (implicit copy)
+    new['delay'] = (dim, np.zeros(alldates.size))  # new coordinate for delays
     # matching dates
     new_logic = np.isin(new[dim].values, dates)
     # not found directly
     jtx = np.where(~new_logic)[0]  # newdates not fitting dates (indices)
     new['delay'].values[jtx] = np.nan  # not fitting dates
-    message("Indices:", new_logic.sum(), (~new_logic).sum(), ">", alldates.size, **kwargs)
+    message("Indices:", new_logic.sum(), "Candiates:", (~new_logic).sum(), ">", alldates.size, **kwargs)
     newindex = [slice(None)] * data.ndim
     oldindex = [slice(None)] * data.ndim
     axis = data.dims.index(dim)
     nn = 0
+    indices = []
     # All times not yet filled
     # Is there some data that fits within the given time window
     for itime in new[dim].values[jtx]:
         diff = (itime - dates) / np.timedelta64(1, 'h')  # closest sounding
-        n = np.sum(np.abs(diff) < span)  # number of soundings within time window
+        n = np.sum(np.abs(diff) <= span)  # number of soundings within time window
         if n > 0:
             i = np.where(alldates == itime)[0]  # index for new array
             if n > 1:
                 # many choices, count data
-                k = np.where(np.abs(diff) < span)[0]
+                k = np.where(np.abs(diff) <= span)[0]
                 oldindex[axis] = k
                 # count data of candidates
                 # weight by time difference (assuming, that a sounding at the edge of the window is less accurate)
                 distance = np.abs(diff[k])
                 counts = np.sum(np.isfinite(data.values[tuple(oldindex)]), axis=1) / np.where(distance != 0, distance,
                                                                                               1)
-                j = k[np.argmax(counts)]  # use the one with max data / min time diff
+                if np.any(counts > 0):
+                    j = k[np.argmax(counts)]  # use the one with max data / min time diff
+                    message(itime, " < ", dates[j], -1 * diff[j], n, counts, **kwu('level', 2, **kwargs))
+                else:
+                    message(itime, "NaN", **kwu('level', 2, **kwargs))
+                    continue
+
             else:
                 j = np.argmin(np.abs(diff))  # only one choice
 
             newindex[axis] = i
             oldindex[axis] = j
-            new.values[tuple(newindex)] = data.values[tuple(oldindex)]  # update data array
-            new['delay'].values[i] = -1 * diff[j]  # pd.Timestamp(dates[j]).hour  # datetime of minimum
-            nn += 1
+            counts = np.sum(np.isfinite(data.values[tuple(oldindex)]), axis=0)
+            if counts > 0:
+                new.values[tuple(newindex)] = data.values[tuple(oldindex)]  # update data array
+                new['delay'].values[i] = -1 * diff[j]  # pd.Timestamp(dates[j]).hour  # datetime of minimum
+                message(itime, " < ", dates[j], -1 * diff[j], n,
+                        np.sum(np.isfinite(data.values[tuple(oldindex)]), axis=0),
+                        **kwu('level', 1, **kwargs))
+                indices += [(i[0], j)]
+                nn += 1
 
     new.attrs['std_times'] = str(times)
     new['delay'].attrs['updated'] = nn
     new['delay'].attrs['missing'] = new['delay'].isnull().sum().values
     new['delay'].attrs['times'] = str(times)
+    if return_indices:
+        return new, np.array(indices)
     return new
 
 

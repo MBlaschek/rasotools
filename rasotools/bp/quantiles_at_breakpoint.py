@@ -2,12 +2,12 @@
 import numpy as np
 import pandas as pd
 
-__all__ = ['quantiles_at_breakpoint']
+__all__ = ['percentiles_at_breakpoint']
 
 
 ################################################
 #
-# Calculate Quantiles at breakpoint
+# Calculate percentiles at breakpoint
 #
 #
 ################################################
@@ -17,14 +17,14 @@ __all__ = ['quantiles_at_breakpoint']
 # can we use that as well after the correction !?
 # 
 # TODO: convert to a function that can be used to understand what is different
-# either calculate quantiles between samples and show
+# either calculate percentiles between samples and show
 # or mean differences
 #
 
-def quantiles_at_breakpoint(data, var, dvar=None, quantilen=None, ibreak=None, sample_size=730, borders=180, verbose=0):
-    """Calculate Quantiles at the breakpoints
+def percentiles_at_breakpoint(data, var, dvar=None, percentilen=None, ibreak=None, sample_size=730, borders=180, verbose=0):
+    """Calculate percentiles at the breakpoints
     """
-    from .dep import quantile
+    from .dep import percentile
     from ..tools import sample_indices
     funcid = '[QAB] '
 
@@ -37,18 +37,18 @@ def quantiles_at_breakpoint(data, var, dvar=None, quantilen=None, ibreak=None, s
     if dvar is None:
         dvar = var
 
-    print funcid + "Data from Variable: ", dvar
+    print(funcid + "Data from Variable: ", dvar)
     if not isinstance(data, (pd.DataFrame, pd.Panel)):
         raise ValueError("Require a DataFrame or Panel as input")
 
-    if quantilen is None:
-        quantilen = np.arange(0, 101, 10)
+    if percentilen is None:
+        percentilen = np.arange(0, 101, 10)
 
-    quantilen = quantilen[(quantilen < 100) & (quantilen > 0)]  # drop 0 and 100
-    qss = sample_size / (len(quantilen) + 1) / 2  # sample size per quantile
-    print funcid + "Quantilen: ", quantilen
-    print funcid + "Global Sample size: %d , per quantile(%d): %d" % (sample_size, len(quantilen), qss)
-    mlabels = ["Q%d" % i for i in quantilen]
+    percentilen = percentilen[(percentilen < 100) & (percentilen > 0)]  # drop 0 and 100
+    qss = sample_size / (len(percentilen) + 1) / 2  # sample size per percentile
+    print(funcid + "percentilen: ", percentilen)
+    print(funcid + "Global Sample size: %d , per percentile(%d): %d" % (sample_size, len(percentilen), qss))
+    mlabels = ["Q%d" % i for i in percentilen]
     mlabels.append(">")
 
     if isinstance(data, pd.DataFrame):
@@ -81,9 +81,9 @@ def quantiles_at_breakpoint(data, var, dvar=None, quantilen=None, ibreak=None, s
                                                         borders=borders,
                                                         recent=False,
                                                         verbose=verbose - 1)
-                # Quantiles at the breakpoint
-                b1, c1, quants1 = qstats(data[dvar].values[iref], quantilen, qss)
-                b2, c2, quants2 = qstats(data[dvar].values[isample], quantilen, qss)
+                # percentiles at the breakpoint
+                b1, c1, quants1 = qstats(data[dvar].values[iref], percentilen, qss)
+                b2, c2, quants2 = qstats(data[dvar].values[isample], percentilen, qss)
 
                 if verbose > 0:
                     print funcid + " %s : %s " % (dvar, breaks[ib])
@@ -129,21 +129,21 @@ def quantiles_at_breakpoint(data, var, dvar=None, quantilen=None, ibreak=None, s
                                                 recent=False,
                                                 verbose=verbose - 1)
 
-        # Quantiles at the breakpoint
-        def myqstats(x, quantilen, sample_size):
-            c, y = qstats(x, quantilen, sample_size)
+        # percentiles at the breakpoint
+        def myqstats(x, percentilen, sample_size):
+            c, y = qstats(x, percentilen, sample_size)
             return y
 
         quants1 = np.apply_along_axis(myqstats,
                                       0,
                                       data[dvar].values[iref],
-                                      quantilen,
+                                      percentilen,
                                       qss)
 
         quants2 = np.apply_along_axis(myqstats,
                                       0,
                                       data[dvar].values[isample],
-                                      quantilen,
+                                      percentilen,
                                       qss)
         out[str(breaks[ib])] = pd.Panel({'Ref': quants1, 'Bias': quants2}, major_axis=mlabels,
                                         minor_axis=data.minor_axis)
@@ -153,14 +153,14 @@ def quantiles_at_breakpoint(data, var, dvar=None, quantilen=None, ibreak=None, s
 
 
 
-def qstats(x, quantilen, counts=0, func=np.nanmean):
+def qstats(x, percentilen, counts=0, func=np.nanmean):
     x = np.asarray(x)
-    n = len(quantilen)
+    n = len(percentilen)
     n += 1
     out = np.full(n, np.nan)
     miss = np.isfinite(x)  # if all are missing
     if np.sum(miss) > 0:
-        qs = np.nanpercentile(x, quantilen)  # can be the same value for two different quantiles ? > needs to be sorted!
+        qs = np.nanpercentile(x, percentilen)  # can be the same value for two different percentiles ? > needs to be sorted!
         qs = np.sort(qs)  # makes sure it is increasingly sorted!
         index = np.digitize(x, qs)  # convert to indices
         dcount = np.bincount(index[miss], minlength=n)  # only good

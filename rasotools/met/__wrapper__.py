@@ -3,7 +3,24 @@
 __all__ = ['dataset_to_hours']
 
 
-def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suffix='', interpolate=False, levels=None, verbose=0):
+def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suffix='', interpolate=False, levels=None,
+                     verbose=0):
+    """ convert all DataArrays in the Dataset to hours
+
+    Args:
+        data:
+        std:
+        variables:
+        dim:
+        lev:
+        suffix:
+        interpolate:
+        levels:
+        verbose:
+
+    Returns:
+
+    """
     from .time import standard_sounding_times, sel_hours
     from .convert import vertical_interpolation
     from ..fun import message
@@ -18,6 +35,7 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
     for i in list(data.data_vars):
         if i == std:
             continue
+
         if variables is not None and i not in variables:
             continue
 

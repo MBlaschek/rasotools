@@ -2,7 +2,7 @@
 import numpy as np
 
 from . import dep
-from ..fun import message, nancount, kwc, kwu, sample
+from ..fun import message, nancount, kwc, kwu
 
 __all__ = ['mean', 'percentile', 'percentile_reference']
 
@@ -60,11 +60,13 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
         # print(i, isample, iref)
         # adjust data ?
         if meanvar:
-            data = dep.meanvar(data, iref, isample, axis=axis, sample_size=sample_size, max_sample=max_sample,
-                               borders=borders, **kwargs)
+            data[isample] = dep.meanvar(data[iref], data[isample], axis=axis, sample_size=sample_size,
+                                        max_sample=max_sample,
+                                        borders=borders, **kwargs)
         else:
-            data = dep.mean(data, iref, isample, axis=axis, sample_size=sample_size, max_sample=max_sample,
-                            borders=borders, ratio=ratio, **kwargs)
+            data[isample] = dep.mean(data[iref], data[isample], axis=axis, sample_size=sample_size,
+                                     max_sample=max_sample,
+                                     borders=borders, ratio=ratio, **kwargs)
         #
         # Border zone (- borders, + borders)
         #
@@ -74,11 +76,13 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
             left = idx2shp(left, axis, dshape)
             right = idx2shp(right, axis, dshape)
             if meanvar:
-                data = dep.meanvar(data, iref, left, axis=axis, sample_size=3, borders=0, **kwargs)
-                data = dep.meanvar(data, iref, right, axis=axis, sample_size=3, borders=0, **kwargs)
+                data[left] = dep.meanvar(data[iref], data[left], axis=axis, sample_size=3, borders=0, **kwargs)
+                data[right] = dep.meanvar(data[iref], data[right], axis=axis, sample_size=3, borders=0, **kwargs)
             else:
-                data = dep.mean(data, iref, left, axis=axis, sample_size=3, borders=0, ratio=ratio, **kwargs)
-                data = dep.mean(data, iref, right, axis=axis, sample_size=3, borders=0, ratio=ratio, **kwargs)
+                data[left] = dep.mean(data[iref], data[left], axis=axis, sample_size=3, borders=0, ratio=ratio,
+                                      **kwargs)
+                data[right] = dep.mean(data[iref], data[right], axis=axis, sample_size=3, borders=0, ratio=ratio,
+                                       **kwargs)
 
         # Debug infos
         if kwc('verbose', value=2, **kwargs):
@@ -147,8 +151,8 @@ def percentile(data, breaks, axis=0, percentilen=None, sample_size=130, borders=
 
         before = np.nanmean(data[isample], axis=axis)
         # Apply Adjustments
-        data = dep.percentile(data, iref, isample, percentilen, axis=axis, sample_size=sample_size,
-                              max_sample=max_sample, borders=borders, ratio=ratio)
+        data[isample] = dep.percentile(data[iref], data[isample], percentilen, axis=axis, sample_size=sample_size,
+                                       max_sample=max_sample, borders=borders, ratio=ratio)
         # Debug infos
         if kwc('verbose', value=2, **kwargs):
             sdata = stats(data, iref, isample, axis=axis, a=before)
@@ -209,16 +213,16 @@ def percentile_reference_period(xdata, ydata, breaks, axis=0, percentilen=None, 
         iref = ref_period
     isample = idx2shp(isample, axis, dshape)
     iref = idx2shp(iref, axis, dshape)
+    #
     # Apply Dist. from xdata[iref] to all ydata  (Match dists.)
-    # s1 = xdata[iref]
-    # s2 = ydata[isample]
-    # dep = s1 - s2
-    ydata = dep.percentile_reference(xdata, ydata, iref, isample, percentilen,
-                                     axis=axis,
-                                     sample_size=sample_size,
-                                     max_sample=np.nan,
-                                     ratio=ratio,
-                                     return_ydata=True)
+    #
+    ydata[isample] = dep.percentile(xdata[iref], ydata[iref], percentilen,
+                                    axis=axis,
+                                    sample_size=sample_size,
+                                    max_sample=np.nan,
+                                    ratio=ratio,
+                                    apply=ydata[isample])
+
     return ydata
 
 
@@ -271,18 +275,23 @@ def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_
         iref = idx2shp(iref, axis, dshape)
 
         before = np.nanmean(xdata[isample], axis=axis)
-
-        # Use same sample for both data
-        xdata = dep.percentile_reference(xdata, ydata, isample, isample, percentilen,
-                                         axis=axis,
-                                         sample_size=sample_size,
-                                         borders=borders,
-                                         max_sample=max_sample,
-                                         ratio=ratio)
+        #
+        # Use same sample for both data, apply to xdata
+        #
+        # xdata, ydata ?
+        xdata[isample] = dep.percentile(ydata[isample], xdata[isample], percentilen,
+                                        axis=axis,
+                                        sample_size=sample_size,
+                                        borders=borders,
+                                        max_sample=max_sample,
+                                        ratio=ratio,
+                                        apply=xdata[isample])
         # Debug infos
         if kwc('verbose', value=2, **kwargs):
             sdata = stats(xdata, iref, isample, axis=axis, a=before)
             sdata = np.array_str(sdata, precision=2, suppress_small=True)
+            if i == (nb - 2):
+                sdata = '[    i     #S          B      dB       S      dS       R   #R   ]\n' + sdata
             message(sdata, **kwu('level', 1, **kwargs))
 
     return xdata

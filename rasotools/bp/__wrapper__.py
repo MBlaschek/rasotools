@@ -5,7 +5,7 @@ from xarray import Dataset, DataArray, set_options
 from ..fun import message, dict2str, kwu
 
 __all__ = ['apply_threshold', 'snht', 'adjust_mean', 'adjust_percentiles', 'adjust_percentiles_ref',
-           'breakpoint_statistics', 'get_breakpoints', 'breakpoint_data']
+           'adjust_reference_period', 'breakpoint_statistics', 'get_breakpoints', 'breakpoint_data', 'adjust_table']
 
 
 def snht(data, dim='date', var=None, dep=None, suffix=None, window=1460, missing=600, **kwargs):
@@ -254,10 +254,7 @@ adjustments these with a mean  adjustment going back in time.
 
     message(name, str(values.shape), 'A:', axis, **kwargs)
 
-    params.update({'sample_size': kwargs.get('sample_size', 730),
-                   'borders': kwargs.get('borders', 180),
-                   'recent': int(kwargs.get('recent', False)),
-                   'ratio': int(kwargs.get('ratio', True))})
+    params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90)})
 
     message(dict2str(params), **kwu('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
@@ -331,10 +328,7 @@ adjustments these with a mean and a percentile adjustment going back in time.
 
     message(name, str(values.shape), 'A:', axis, 'Q:', np.size(percentilen), "Dep:", str(dep_var), **kwargs)
 
-    params.update({'sample_size': kwargs.get('sample_size', 730),
-                   'borders': kwargs.get('borders', 180),
-                   'recent': int(kwargs.get('recent', False)),
-                   'ratio': int(kwargs.get('ratio', True))})
+    params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90)})
 
     message(dict2str(params), **kwu('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
@@ -408,10 +402,7 @@ adjustments these with a mean and a percentile adjustment going back in time.
 
     message(name, str(values.shape), 'A:', axis, 'Q:', np.size(percentilen), "Adj:", adjname, **kwargs)
 
-    params.update({'sample_size': kwargs.get('sample_size', 730),
-                   'borders': kwargs.get('borders', 180),
-                   'recent': int(kwargs.get('recent', False)),
-                   'ratio': int(kwargs.get('ratio', True))})
+    params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90)})
 
     message(dict2str(params), **kwu('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
@@ -430,14 +421,14 @@ adjustments these with a mean and a percentile adjustment going back in time.
     data[name + suffix].attrs['reference'] = adjname
 
     if adjust_reference:
-        data[name + suffix + '_ref'] = (data[name].dims, avalues)
-        data[name + suffix + '_ref'].attrs.update(params)
-        data[name + suffix + '_ref'].attrs['standard_name'] = stdn + '_percentil_ref'
+        data[adjname + suffix] = (data[adjname].dims, avalues)
+        data[adjname + suffix].attrs.update(params)
+        data[adjname + suffix].attrs['standard_name'] = stdn + '_percentil_ref_adj'
 
     return data
 
 
-def adjust_reference_period(data, name, adjname, breakname, dim='date', suffix='_qa', percentilen=None, **kwargs):
+def adjust_reference_period(data, name, refname, breakname, dim='date', suffix='_qa', percentilen=None, **kwargs):
     from . import adj
     if not isinstance(data, Dataset):
         raise ValueError("Requires a Dataset object", type(data))
@@ -448,7 +439,7 @@ def adjust_reference_period(data, name, adjname, breakname, dim='date', suffix='
     if name not in data.data_vars:
         raise ValueError("data var not present")
 
-    if adjname not in data.data_vars:
+    if refname not in data.data_vars:
         raise ValueError("data var not present")
 
     if breakname not in data.data_vars:
@@ -464,25 +455,26 @@ def adjust_reference_period(data, name, adjname, breakname, dim='date', suffix='
     if percentilen is None:
         percentilen = np.arange(0, 101, 10)
 
-    values = data[name].values.copy()
-    avalues = data[adjname].values.copy()
+    values = data[refname].values.copy()  # RASO
+    avalues = data[name].values.copy()  # Reanalysis (ERA)
+
     breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
     axis = data[name].dims.index(dim)
     params = data[name].attrs.copy()  # deprecated (xr-patch)
 
-    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(percentilen), "Adj:", adjname, **kwargs)
+    message(name, str(values.shape), 'A:', axis, 'Q:', np.size(percentilen), "Adj:", refname, **kwargs)
 
-    params.update({'sample_size': kwargs.get('sample_size', 730),
-                   'borders': kwargs.get('borders', 180),
-                   'recent': int(kwargs.get('recent', False)),
-                   'ratio': int(kwargs.get('ratio', True))})
+    params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90)})
 
     message(dict2str(params), **kwu('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
+    #
+    # Adjust name with refname in reference period
+    #
     avalues = adj.percentile_reference_period(values, avalues, breaks, axis=axis, percentilen=percentilen, **kwargs)
-    data[name + suffix + '_ref'] = (data[name].dims, avalues)
-    data[name + suffix + '_ref'].attrs.update(params)
-    data[name + suffix + '_ref'].attrs['standard_name'] = stdn + '_percentil_ref'
+    data[name + suffix] = (data[name].dims, avalues)
+    data[name + suffix].attrs.update(params)
+    data[name + suffix].attrs['standard_name'] = stdn + '_percentil_adj'
     return data
 
 
@@ -494,6 +486,7 @@ def apply_bounds(data, name, other, lower, upper):
     logic = data[name].values > upper
     n += np.sum(logic)
     data[name].values = np.where(logic, data[other].values, data[name].values)
+    data[name].attrs['bounds'] = "[%d , %d]" % (lower, upper)
     print("Outside bounds [", lower, "|", upper, "] :", n)
 
 
@@ -614,8 +607,13 @@ var     2   4  4
     """
     import pandas as pd
     from ..fun import rmse
+
+    axis = data[name].dims.index(dim)
     # for all reanalysis
     out = {}
+    out[name] = {'data': {'RMSE': rmse(data[name], np.nanmean(data[name], axis=axis)),
+                          'MEAN': np.nanmean(data[name]),
+                          'VAR': np.nanvar(data[name])}}
     for i, iana in enumerate(analysis):
         tmp = data[[name, iana]].copy()
         # snht
@@ -623,18 +621,34 @@ var     2   4  4
         # threshold
         tmp = apply_threshold(tmp, var=name + '_snht', dim=dim)
         out[iana] = {}
-        out[iana]['n'] = len(get_breakpoints(tmp, dim=dim, var=name + '_snht_break'))
-        out[name] = {'data': {'RMSE': rmse(tmp[name], tmp[iana]),
+        out[iana]['n'] = len(get_breakpoints(tmp, dim=dim, var=name + '_snht_breaks'))
+        out[iana] = {'data': {'RMSE': rmse(tmp[name], tmp[iana]),
                               'MEAN': np.nanmean(tmp[name] - tmp[iana]),
                               'VAR': np.nanvar(tmp[name] - tmp[iana])}}
-        # adjust
-        tmp = adjust_mean(tmp, name, name + '_snht_break', dim=dim, **kwargs)
+        # adjust Mean
+        tmp = adjust_mean(tmp, name, name + '_snht_breaks', dim=dim, **kwargs)
         out[iana]['mdiff'] = {'RMSE': rmse(tmp[name + '_m'], tmp[iana]),
                               'MEAN': np.nanmean(tmp[name + '_m'] - tmp[iana]),
                               'VAR': np.nanvar(tmp[name + '_m'] - tmp[iana])}
+        # adjust Percentiles
+        tmp = adjust_percentiles(tmp, name, name + '_snht_breaks', dim=dim, **kwargs)
+        out[iana]['qdiff'] = {'RMSE': rmse(tmp[name + '_q'], tmp[iana]),
+                              'MEAN': np.nanmean(tmp[name + '_q'] - tmp[iana]),
+                              'VAR': np.nanvar(tmp[name + '_q'] - tmp[iana])}
+        # adjust Reference
+        tmp = adjust_reference_period(tmp, iana, name, name + '_snht_breaks', dim=dim, **kwargs)
+        out[iana]['qrdiff'] = {'RMSE': rmse(tmp[iana + '_qa'], tmp[iana]),
+                               'MEAN': np.nanmean(tmp[iana + '_qa'] - tmp[iana]),
+                               'VAR': np.nanvar(tmp[iana + '_qa'] - tmp[iana])}
+        # adjust Percentiles using a Reference
+        tmp = adjust_percentiles_ref(tmp, name, iana, name + '_snht_breaks', dim=dim, **kwargs)
+        out[iana]['qadiff'] = {'RMSE': rmse(tmp[name + '_qa'], tmp[iana]),
+                               'MEAN': np.nanmean(tmp[name + '_qa'] - tmp[iana]),
+                               'VAR': np.nanvar(tmp[name + '_qa'] - tmp[iana])}
 
     for ikey, idata in out.items():
-        out[ikey] = pd.Dataframe(idata)
+        out[ikey] = pd.DataFrame(idata)
+
     return pd.concat(out, axis=1)
 
 
@@ -650,19 +664,18 @@ def correct_2var(xdata, ydata):
     pass
 
 
-def breakpoint_data(data, a, b, c, dim='date', borders=0, sample_size=130, max_sample=1460, recent=False,
+def breakpoint_data(data, name, breakname, dim='date', borders=0, nmin=130, nmax=None, recent=False,
                     return_indices=False, **kwargs):
     """ Get Data before and after a breakpoint (index)
 
     Args:
-        data (DataArray): Input data
-        a (int): index earlier than breakpoint
-        b (int): index of breakpoint
-        c (int): index later than breakpoint
+        data (Dataset): Input data
+        name (str): variable to return
+        breakname (str): breakpoint variable
         dim (str): datetime dimension
         borders (int): borders around breakpoint to ignore
-        sample_size (int): minimum sample size for stats
-        max_sample (int): maxmimum sample size for stats
+        nmin (int): minimum sample size for stats
+        nmax (int): maxmimum sample size for stats
         recent (bool): don't use c
         return_indices (bool): return indices instead of data
         **kwargs:
@@ -672,40 +685,65 @@ def breakpoint_data(data, a, b, c, dim='date', borders=0, sample_size=130, max_s
         or
         tuple, tuple : Before, Before, After Indices
     """
+    from ..Radiosonde import Bunch
     from .adj import idx2shp
-    if not isinstance(data, DataArray):
-        raise ValueError()
+    if not isinstance(data, Dataset):
+        raise ValueError("Requires a Dataset, ", type(data))
+    if name not in data.data_vars:
+        raise ValueError("Variable not found, ", name)
+    if breakname not in data.data_vars:
+        raise ValueError("Variable not found, ", breakname)
 
+    breaks = get_breakpoints(data[breakname], value=kwargs.get('value', 2), dim=dim)
+    data = data[name].copy()
     axis = data.dims.index(dim)
-    dshape = data.values.shape
-    ibiased = slice(a, b)
-    isample = slice(b, c)
-    if (b - a) - borders > sample_size:
-        # [ - ; -borders]
-        isample = slice(a, b - borders)
-        ibiased = slice(a, b - borders)
-        if (b - a) - 2 * borders > sample_size:
+    dshape = data.values.shape  # Shape of data (date x levs)
+    imax = dshape[axis]  # maximum index
+    breaks = np.sort(np.asarray(breaks))  # sort
+    breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... Max
+    nb = breaks.size
+    out = Bunch()
+
+    for i in range(nb - 2, 0, -1):
+        # make datasets
+        im = breaks[i - 1]  # earlier
+        ib = breaks[i]  # current breakpoint
+        if recent:
+            ip = imax  # Max
+        else:
+            ip = breaks[i + 1]  # later
+
+        # print(i, im, ib)
+        # Slices all axes
+        iref = slice(ib, ip)
+        isample = slice(im, ib)
+        if borders > 0:
             # [ +borders ; -borders ]
-            isample = slice(a + borders, b - borders)
-            if (b - a) - 2 * borders > max_sample:
-                # [ -max_sample ; -borders]
-                isample = slice(b - borders - max_sample, b - borders)
-                message("A [%d - %d - %d = %d - %d - %d = %d]" % (
-                    b, borders, max_sample, isample.start, b, borders, isample.stop), **kwu('level', 1, **kwargs))
+            if (ip - ib) - 2 * borders > nmin:
+                iref = slice(ib + borders, ip - borders)
+                if nmax is not None:
+                    if (ip - ib) - 2 * borders > nmax:
+                        # [ +borders ; nmax ]
+                        iref = slice(ib + borders, ib + borders + nmax)
 
-    if (c - b) - borders > sample_size:
-        iref = slice(b + borders, c)
-        if (c - b) - borders > max_sample and not recent:
-            iref = slice(b + borders, b + borders + max_sample)
-    else:
-        iref = slice(b, c)
+            if (ib - im) - 2 * borders > nmin:
+                isample = slice(im + borders, ib - borders)
+                if nmax is not None:
+                    if (ib - im) - 2 * borders > nmax:
+                        # [ -max_sample ; -borders]
+                        isample = slice(ib - borders - nmax, ib - borders)
 
-    ibiased = idx2shp(ibiased, axis, dshape)
-    isample = idx2shp(isample, axis, dshape)
-    iref = idx2shp(iref, axis, dshape)
-    if return_indices:
-        return isample, ibiased, iref
-    return data[isample], data[ibiased], data[iref]
+        isample = idx2shp(isample, axis, dshape)
+        iref = idx2shp(iref, axis, dshape)
+        name = '%02d' % i
+        if return_indices:
+            out['B' + name] = isample
+            out['R' + name] = iref
+        else:
+            out['B' + name] = data[isample]
+            out['R' + name] = data[iref]
+            # out['R' + name]  # add break
+    return out
 
 
 def breakpoint_statistics(data, breakname, dim='date', agg='mean', borders=None, inbetween=True, max_sample=None,

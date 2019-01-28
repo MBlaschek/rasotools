@@ -105,6 +105,10 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         # READ ASCII
         data, station = read_ascii(ident, filename=filename, **kwargs)  # DataFrame
         message(ident, levels, **kwargs)
+        numlev = data.groupby(data.index).nunique().max(axis=1)  # number of levels
+        #
+        # Interpolation
+        #
         data = dataframe(data, 'pres', levels=levels, **kwargs)
 
         # Add Metadata
@@ -129,16 +133,19 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
 
         data = xr.Dataset(new)
         data.attrs.update({'ident': ident, 'source': 'NOAA NCDC', 'dataset': 'IGRAv2',
-                           'levels': 'ERA-I 32 lower', 'processed': 'UNIVIE, IMG', 'libs': config.libinfo})
+                           'levels': 'plevs [%d -%d] #%d' %(min(levels), max(levels), len(levels)),
+                           'processed': 'UNIVIE, IMG', 'libs': config.libinfo})
 
         station = station.reindex(np.unique(data.date.values))  # same dates as data
-        station = station.fillna(method='ffill')  # fill Missing information with last known
+        # station = station.fillna(method='ffill')  # fill Missing information with last known
+        station['numlev'] = numlev
         station = station.to_xarray()
         for ivar, idata in station.data_vars.items():
             data[ivar] = idata
 
-    if save:
-        data.to_netcdf(config.rasodir + '/%s/IGRAv2.nc' % ident)
+        if save:
+            data.to_netcdf(config.rasodir + '/%s/IGRAv2.nc' % ident)
+            message(ident, 'Saving: ', config.rasodir + '/%s/IGRAv2.nc' % ident, **kwargs)
 
     return data
 

@@ -62,6 +62,10 @@ def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False, fa
 
 def sample(values, nmin, nmax, func, borders=0, flip=False, fargs=()):
     # variable output, One value or array
+    # todo make a numba version of this function
+    # make everything loops and stuff
+    # find nan
+    # find max, min number of data and apply function
     import numpy as np
     itx = np.isfinite(values)
     n = itx.sum()
@@ -84,7 +88,7 @@ def sample(values, nmin, nmax, func, borders=0, flip=False, fargs=()):
         return func(values[j:], *fargs)
 
 
-def rmse(x, y, axis=None):
+def rmse(x, y=None, axis=None):
     """ RMSE
 
     Args:
@@ -96,6 +100,8 @@ def rmse(x, y, axis=None):
         float : RMSE
     """
     import numpy as np
+    if y is None:
+        y = 0.
     return np.sqrt(np.nanmean((x - y) * (x - y), axis=axis))
 
 

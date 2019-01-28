@@ -48,7 +48,7 @@ def threshold(data, dim='date', lev=None, thres=50, colorlevels=None, legend=Tru
                    title=get_info(data), clabel='above')
 
         return contour(ax, data[dim].values, data[lev].values, data.values, logy=logy, colorlevels=colorlevels,
-                       yticklabel=yticklabels, legend=legend, **kwargs)
+                       yticklabels=yticklabels, legend=legend, **kwargs)
 
 
 def summary(data, dim='date', thres=None, ax=None, **kwargs):
@@ -137,7 +137,7 @@ def var(data, dim='date', lev=None, colorlevels=None, logy=False, yticklabels=No
                    title=get_info(data), clabel=get_info(data))
 
         return contour(ax, data[dim].values, data[lev].values, data.values, logy=logy, colorlevels=colorlevels,
-                       yticklabel=yticklabels, legend=legend, **kwargs)
+                       yticklabels=yticklabels, legend=legend, **kwargs)
 
 
 def breakpoints(data, dim='date', thres=2, startend=False, borders=None, filled=False, ax=None, **kwargs):
@@ -171,7 +171,11 @@ def breakpoints(data, dim='date', thres=2, startend=False, borders=None, filled=
     e = []
     s = []
     axis = data.dims.index(dim)
-    summe = data.values.sum(axis=1 if axis == 0 else 0)
+    if data.ndim > 1:
+        summe = data.values.sum(axis=1 if axis == 0 else 0)
+    else:
+        summe = data.values
+
     for k in indices:
         l = np.where(summe[:k][::-1] == 0)[0][0]
         m = np.where(summe[k:] == 0)[0][0]

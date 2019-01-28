@@ -188,7 +188,10 @@ def contour(ax, dates, plevs, test, logy=False, colorlevels=None, yticklabels=No
     ax.set_title(title)
     ax.set_ylabel(ylabel)
     ax.set_xlabel(xlabel)
-    ax.invert_yaxis()
+
+    if np.diff(ax.get_ylim()) > 0:
+        ax.invert_yaxis()
+
     ax.grid('gray', ls='--')
     if legend:
         cbar = plt.colorbar(cs, ax=ax, orientation=kwargs.get('orientation', "vertical"),

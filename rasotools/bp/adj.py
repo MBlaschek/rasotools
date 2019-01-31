@@ -36,6 +36,7 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
     imax = dshape[axis]  # maximum index
     breaks = np.sort(np.asarray(breaks))  # sort
     breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... Max
+    breaks = breaks.astype(int)
     nb = breaks.size
     # print(breaks)
 
@@ -132,6 +133,7 @@ def percentile(data, breaks, axis=0, percentilen=None, sample_size=130, borders=
     imax = dshape[axis]
     breaks = np.sort(np.asarray(breaks))  # sort
     breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
+    breaks = breaks.astype(int)
     nb = breaks.size
 
     for i in range(nb - 2, 0, -1):
@@ -203,6 +205,7 @@ def percentile_reference_period(xdata, ydata, breaks, axis=0, percentilen=None, 
     imax = dshape[axis]
     breaks = np.sort(np.asarray(breaks))  # sort
     breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
+    breaks = breaks.astype(int)
     #
     # 1. Adjust Reference to match distribution of unbiased period
     #
@@ -253,6 +256,7 @@ def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_
     imax = dshape[axis]
     breaks = np.sort(np.asarray(breaks))  # sort
     breaks = np.append(np.insert(breaks, 0, 0), imax)  # 0 ... ibreaks ... None
+    breaks = breaks.astype(int)
     nb = breaks.size
 
     #

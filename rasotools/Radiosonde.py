@@ -285,11 +285,14 @@ class Radiosonde(object):
         if not isinstance(name, list):
             name = [name]
 
-        if 'rasodir' in config:
-            if os.path.isdir(config.rasodir):
-                directory = config.rasodir + '/' + str(self.ident) + '/'
-                message("rasodir ", directory, **kwargs)
-
+        if directory is None:
+            if 'rasodir' in config:
+                if os.path.isdir(config.rasodir):
+                    directory = config.rasodir
+            else:
+                directory = '.'
+        directory += '/' + str(self.ident) + '/'
+        message("Output directory:", directory, **kwargs)
         attrs = vars(self.attrs)
 
         for iname in name:

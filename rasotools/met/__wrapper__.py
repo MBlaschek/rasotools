@@ -45,7 +45,7 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
         else:
             new[i + suffix] = sel_hours(data[i])
 
-        if std is not None:
+        if std is not None and idx.size > 0:
             # if dim in dims
             if dim in data[i].dims:
                 inew = [slice(None)] * new[i + suffix].ndim

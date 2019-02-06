@@ -137,7 +137,7 @@ def anomaly(data, dim='date', period=None, keep_attrs=True):
     Returns:
         DataArray : Anomalies
     """
-    from xarray import DataArray
+    from xarray import DataArray, set_options
     if not isinstance(data, DataArray):
         raise ValueError("Requires a numpy array (data)")
 
@@ -148,7 +148,9 @@ def anomaly(data, dim='date', period=None, keep_attrs=True):
     # Calculate Climatology
     clim = climatology(data, dim=dim, period=period, keep_attrs=keep_attrs)
     # Calculate Anomaly
-    data = data.groupby(dim + '.month') - clim
+    with set_options(keep_attrs=keep_attrs):
+        data = data.groupby(dim + '.month') - clim
+
     data = data.drop('month')
     if 'standard_name' in data.attrs:
         data.attrs['standard_name'] += '_ano'
@@ -182,7 +184,7 @@ def trend(data, dim='date', use_anomalies=True, period=None, min_periods=3, meth
     """
     import numpy as np
     from xarray import DataArray, Dataset
-    from ..fun import linear_trend
+    from ..fun import linear_trend, set_attrs
 
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
@@ -214,26 +216,26 @@ def trend(data, dim='date', use_anomalies=True, period=None, min_periods=3, meth
     # slope and intercept
     idx = [slice(None)] * params.ndim
     idx[axis] = 0  # slope
-    slope = DataArray(params[idx] * per, coords=coords, dims=dimens, name='slope', attrs=attrs)
+    slope = DataArray(params[tuple(idx)] * per, coords=coords, dims=dimens, name='slope', attrs=attrs)
     slope.attrs['units'] += '/day'
     slope.attrs['standard_name'] += '_trend'
     slope.attrs['cell_method'] = 'daily trend of anomalies' if use_anomalies else 'daily trend'
 
     idx[axis] = 1  # slope
-    interc = DataArray(params[idx], coords=coords, dims=dimens, name='intercept', attrs=attrs)
+    interc = DataArray(params[tuple(idx)], coords=coords, dims=dimens, name='intercept', attrs=attrs)
     interc.attrs['standard_name'] += '_intercept'
 
     if params.shape[axis] > 2:
         if method == 'theil_sen':
             idx[axis] = 2  # slope lower
-            aslope = DataArray(params[idx] * per, coords=coords, dims=dimens, name='slope_min', attrs=attrs)
+            aslope = DataArray(params[tuple(idx)] * per, coords=coords, dims=dimens, name='slope_min', attrs=attrs)
             aslope.attrs['units'] += '/day'
             aslope.attrs['standard_name'] += '_trend_min'
             aslope.attrs['alpha'] = alpha
             aslope.attrs['cell_method'] = 'daily trend of anomalies' if use_anomalies else 'daily trend'
 
             idx[axis] = 3  # slope upper
-            bslope = DataArray(params[idx] * per, coords=coords, dims=dimens, name='slope_max', attrs=attrs)
+            bslope = DataArray(params[tuple(idx)] * per, coords=coords, dims=dimens, name='slope_max', attrs=attrs)
             bslope.attrs['units'] += '/day'
             bslope.attrs['standard_name'] += '_trend_max'
             bslope.attrs['alpha'] = alpha
@@ -242,18 +244,18 @@ def trend(data, dim='date', use_anomalies=True, period=None, min_periods=3, meth
 
         # r_value, p_value, std_err
         idx[axis] = 2  # R-value
-        rslope = DataArray(params[idx] ** 2, coords=coords, dims=dimens, name='r_squared', attrs=attrs)
+        rslope = DataArray(params[tuple(idx)] ** 2, coords=coords, dims=dimens, name='r_squared', attrs=attrs)
         rslope.attrs['units'] = '1'
         rslope.attrs['standard_name'] += '_r_squared'
 
         idx[axis] = 3  # p-value
-        bslope = DataArray(params[idx], coords=coords, dims=dimens, name='p_value', attrs=attrs)
+        bslope = DataArray(params[tuple(idx)], coords=coords, dims=dimens, name='p_value', attrs=attrs)
         bslope.attrs['units'] = '1'
         bslope.attrs['standard_name'] += '_p_value'
         bslope.attrs['cell_method'] = 'p-value for null hypothesis(slope==0)'
 
         idx[axis] = 4  # std err
-        sslope = DataArray(params[idx], coords=coords, dims=dimens, name='std_err', attrs=attrs)
+        sslope = DataArray(params[tuple(idx)], coords=coords, dims=dimens, name='std_err', attrs=attrs)
         sslope.attrs['units'] += '/day'
         sslope.attrs['standard_name'] += '_std_err'
         sslope.attrs['cell_method'] = 'standard error of slope'
@@ -281,7 +283,7 @@ def trend_mon_percentile(data, dim='date', percentile=None, period=None,
     """
     import numpy as np
     from xarray import DataArray, Dataset
-    from ..fun import sample_wrapper, xarray_function_wrapper as xfw
+    from ..fun import sample_wrapper, xarray_function_wrapper as xfw, set_attrs
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
 
@@ -309,7 +311,7 @@ def trend_mon_percentile(data, dim='date', percentile=None, period=None,
         itrend = trend(tmp, dim=dim, period=period, use_anomalies=False,
                        min_periods=min_periods, method=method, **kwargs)
         itrend = itrend['slope']
-        itrend.attrs['standard_name'] += '_perc'
+        set_attrs(itrend, 'standard_name', add='_perc', default='percentiles')
         itrend.attrs['cell_method'] = 'daily trend of monthly percentiles'
         itrend.attrs['min_per_month'] = min_per_month
         trends['slope_perc_%02d' % iq] = itrend
@@ -359,7 +361,7 @@ def correlate(x, y, dim='date', period=None, method='spearman', **kwargs):
         DataArray : correlation coefficients
     """
     from xarray import DataArray, align, apply_ufunc
-    from ..fun import spearman_correlation, pearson_correlation
+    from ..fun import spearman_correlation, pearson_correlation, set_attrs
 
     if not isinstance(x, DataArray):
         raise ValueError("Requires a DataArray class object")
@@ -403,7 +405,7 @@ def correlate(x, y, dim='date', period=None, method='spearman', **kwargs):
     else:
         corr = ps_corr(x, y, dim, axis)
 
-    corr.attrs['standard_name'] += '_corr'
+    set_attrs(corr, 'standard_name', add='_corr', default='correlation')
     corr.attrs['units'] = '1'
     corr.attrs['cell_method'] = '%s correlation with %s' % (method, y.name)
     return corr
@@ -422,7 +424,7 @@ def covariance(x, y, dim='date', period=None):
 
     """
     from xarray import DataArray, align, apply_ufunc
-    from ..fun import covariance
+    from ..fun import covariance, set_attrs
 
     if not isinstance(x, DataArray):
         raise ValueError("Requires a DataArray class object")
@@ -449,10 +451,10 @@ def covariance(x, y, dim='date', period=None):
                            keep_attrs=True)
 
     corr = nancov(x, y, dim, axis)
-    corr.name += '_corr'
-    corr.attrs['standard_name'] += '_cov'
-    corr.attrs['units'] += '2'  # squared
-    corr.attrs['cell_method'] = 'covariance with %s' % y.name
+    corr.name += '_cov'
+    set_attrs(corr, 'standard_name', add='_cov', default='covariance')
+    set_attrs(corr, 'units', add='2', default='2')
+    set_attrs(corr, 'cell_method', set='covariance with %s' % y.name)
     return corr
 
 

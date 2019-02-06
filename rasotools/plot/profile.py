@@ -124,3 +124,63 @@ def winds(data, u='u', v='v', dim='pres', barbs=True, ax=None, logy=False, ytick
 
 def filled():
     pass
+
+
+def boxplot(data, dim='pres', ax=None, vline=None, yticklabels=None, logy=False, **kwargs):
+    import pandas as pd
+    from xarray import DataArray
+    import matplotlib.pyplot as plt
+    from ._helpers import set_labels, get_info
+
+    if not isinstance(data, DataArray):
+        raise ValueError('Requires a DataArray', type(data))
+
+    if dim not in data.dims:
+        raise ValueError('Requires a datetime dimension', dim)
+
+    if data.ndim != 2:
+        raise ValueError('Too many/few dimensions', data.dims, data.shape)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    axis = data.dims.index(dim)
+    dims = list(data.dims)
+    dims.remove(dim)
+    odim = dims[0]
+    levels = data[dim].values.copy()
+    lev_units = data[dim].attrs.get('units', 'Pa')
+    if lev_units == 'Pa':
+        levels /= 100.
+        lev_units = 'hPa'
+
+    levels = levels.astype(int)
+    if axis == 0:
+        idata = pd.DataFrame(data.values.T, index=data[odim].values, columns=levels)
+    else:
+        idata = pd.DataFrame(data.values, index=data[odim].values, columns=levels)
+
+    set_labels(kwargs, xlabel=get_info(data),
+               title=get_info(data), ylabel=dim + ' [%s]' % lev_units)
+    idata = idata.rename(columns=lambda x: int(x / 100)).sort_index(axis=1, ascending=False)
+    idata.boxplot(ax=ax, vert=False, return_type='axes', sym='+')
+    if vline is not None:
+        ax.axvline(x=vline, color='k', lw=1)
+    ax.grid(ls='--')
+    ax.set_title(kwargs.get('title'))
+    ax.set_ylabel(kwargs.get('ylabel'))
+    ax.set_xlabel(kwargs.get('xlabel'))
+    if logy:
+        ax.set_yscale('log')
+
+    ax.set_xlim(*kwargs.get('xlim', (None, None)))
+
+    if yticklabels is not None:
+        for label in ax.yaxis.get_ticklabels():
+            if int(label.get_text()) not in yticklabels:
+                label.set_visible(False)
+    else:
+        for label in ax.yaxis.get_ticklabels()[::2]:
+            label.set_visible(False)
+    return ax
+

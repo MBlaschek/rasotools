@@ -497,10 +497,11 @@ def read_ascii(ident, filename=None, filename_pattern=None, **kwargs):
     if filename is None:
         filename = find_files(config.igradir, filename_pattern % ident)
         # filename = igradir + '/' + filename_pattern % ident
-        if len(filename) > 1:
+        if len(filename) > 0:
             message("Found:", ", ".join(filename), name='IRA', **kwargs)
-        filename = filename[0]
-        message("Using:", filename, name='IRA', **kwargs)
+            filename = filename[0]
+        else:
+            filename = ''
 
     if not os.path.isfile(filename):
         raise IOError("File not Found! %s" % filename)

@@ -7,7 +7,6 @@ from ..fun import message
 __all__ = ['detector', 'test']
 
 
-@njit(parallel=True)
 def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwargs):
     if ndist is None and nthres is None and nlevels is None:
         raise ValueError("requires either ndist, nthres or nlevels")
@@ -18,14 +17,14 @@ def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwa
         if isinstance(ndist, int):
             ndist = np.linspace(180, 1460, ndist)
         # n = len(ndist)
-        for i in prange(ndist):
+        for i in ndist:
             tmp += detector(data, axis=axis, dist=i, **kwargs)
 
     if nthres is not None:
         if isinstance(nthres, int):
             nthres = np.linspace(5, 100, nthres)
         # n = len(nthres) if n == -1 else n + len(nthres)
-        for i in prange(nthres):
+        for i in nthres:
             tmp += detector(data, axis=axis, thres=i, **kwargs)
 
     if nlevels is not None:
@@ -33,10 +32,10 @@ def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwa
             iaxis = 1 if axis == 0 else 0
             nlevels = range(1, data.shape[iaxis])
         # n = len(nlevels) if n == -1 else n + len(nlevels)
-        for i in prange(nlevels):
+        for i in nlevels:
             tmp += detector(data, axis=axis, min_levels=i, **kwargs)
 
-    return tmp / np.max(tmp)
+    return tmp #2*(tmp / np.max(tmp))  # (1)
 
 
 def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, **kwargs):

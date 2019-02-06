@@ -102,9 +102,11 @@ class Radiosonde(object):
         if not isinstance(name, list):
             name = [name]
 
-        if 'rasodir' in config and directory is None:
-            if os.path.isdir(config.rasodir):
+        if directory is None:
+            if 'rasodir' in config and os.path.isdir(config.rasodir):
                 directory = config.rasodir
+            else:
+                directory = '.'
 
         if filename is not None:
             if '.nc' not in filename:

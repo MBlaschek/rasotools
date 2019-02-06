@@ -19,10 +19,12 @@ def station(lon, lat, label=None, marker='o', markersize=20, ax=None, filename=N
     pass
 
 
-def points(lon, lat, labels=None, values=None, markersize=80, ax=None, ocean=True, land=True, coastlines=True,
-           grid=True, posneg=False, extent=None, lloffset=0.2, showcost=False, clabel=None, cbars={}, **kwargs):
+def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=True, coastlines=True, rivers=False,
+           grid=True, posneg=False, extent=None, lloffset=0.2, showcost=False, clabel=None, cbars={}, colorlevels=None,
+           **kwargs):
     import numpy as np
     import cartopy as cpy
+    from matplotlib.colors import BoundaryNorm
     import matplotlib.pyplot as plt
     from ._helpers import cost
 
@@ -38,8 +40,7 @@ def points(lon, lat, labels=None, values=None, markersize=80, ax=None, ocean=Tru
             raise ValueError("Lon, Lat and Values need same size", lon.size, lat.size, values.size)
 
     projection = kwargs.get('projection', cpy.crs.PlateCarree())
-    if ax is None:
-        ax = plt.axes(projection=projection)
+    ax = plt.axes(projection=projection, figsize=kwargs.get('figsize', (12, 6)))
 
     if ocean:
         ax.add_feature(cpy.feature.OCEAN, zorder=0)
@@ -49,6 +50,10 @@ def points(lon, lat, labels=None, values=None, markersize=80, ax=None, ocean=Tru
 
     if coastlines:
         ax.coastlines()
+
+    if rivers:
+        ax.add_feature(cpy.feature.LAKES, zorder=0)
+        ax.add_feature(cpy.feature.RIVERS, zorder=1)
 
     if labels is not None:
         labels = np.asarray(labels)
@@ -60,24 +65,42 @@ def points(lon, lat, labels=None, values=None, markersize=80, ax=None, ocean=Tru
         if posneg:
             kwargs['marker'] = np.where(values < 0, 'd', 'o')
 
-        cs = ax.scatter(lon, lat, s=markersize, c=values, transform=projection, zorder=10,
-                        cmap=kwargs.get('cmap', None), edgecolor='k', marker=kwargs.get('marker', 'o'))
-        cb = plt.colorbar(cs, ax=ax, **cbars)
+        cmap = plt.get_cmap(kwargs.pop('cmap', None))
+        norm = None
+        if colorlevels is not None:
+            norm = BoundaryNorm(colorlevels, cmap.N)
+
+        cs = ax.scatter(lon, lat, s=markersize, c=values,
+                        transform=projection,
+                        zorder=10,
+                        cmap=cmap,
+                        edgecolor='k',
+                        marker=kwargs.get('marker', 'o'),
+                        norm=norm)
+
+        cb = plt.colorbar(cs, ax=ax,
+                          fraction=cbars.get('fraction', 0.01),
+                          aspect=cbars.get('aspect', 50),
+                          shrink=cbars.get('shrink', 0.8),
+                          extend=cbars.get('extend', 'both'))
+
         if clabel is not None:
             cb.set_label(clabel)
+
         if showcost:
             tcost = cost(lon, lat, values)
 
         if np.isfinite(values).sum() != np.size(values):
             itx = ~np.isfinite(values)
-            ax.scatter(lon[itx], lat[itx], s=markersize, marker='s', c='w', transform=projection, zorder=10,
+            ax.scatter(lon[itx], lat[itx], s=markersize, marker='s', c='w', transform=projection, zorder=9,
                        edgecolor='k')
 
     if labels is not None:
         for i, j, l in zip(lon, lat, labels):
             # bbox=dict(facecolor='white', alpha=0.40, edgecolor='none'),
             ax.text(i + lloffset, j, str(l), horizontalalignment='left', verticalalignment='top',
-                    transform=projection, fontsize=kwargs.get('fontsize', 8), zorder=12)
+                    transform=projection, fontsize=kwargs.get('fontsize', 8), zorder=12,
+                    clip_on=True)
 
     if grid:
         try:
@@ -148,7 +171,7 @@ def values_zonal_meridional(lon, lat, values, zonal=True, ax=None, label=None, l
     grid = np.zeros((nx, ny))
     for i in range(nx):
         for j in range(ny):
-            logic = (lon >= lon_bins[i] & lon < lon_bins[i+1]) & (lat >= lat_bins[j] & lat < lat_bins[j+1])
+            logic = (lon >= lon_bins[i] & lon < lon_bins[i + 1]) & (lat >= lat_bins[j] & lat < lat_bins[j + 1])
             grid[i, j] = func(values[logic], **fkwargs)
     # average zonally
 

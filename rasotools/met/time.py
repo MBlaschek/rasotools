@@ -217,13 +217,13 @@ def trend(data, dim='date', use_anomalies=True, period=None, min_periods=3, meth
     idx = [slice(None)] * params.ndim
     idx[axis] = 0  # slope
     slope = DataArray(params[tuple(idx)] * per, coords=coords, dims=dimens, name='slope', attrs=attrs)
-    slope.attrs['units'] += '/day'
-    slope.attrs['standard_name'] += '_trend'
+    set_attrs(slope, 'units', add='/day', default='1/day') #slope.attrs['units'] += '/day'
+    set_attrs(slope, 'standard_name', add='_trend', default='trend') #slope.attrs['standard_name'] += '_trend'
     slope.attrs['cell_method'] = 'daily trend of anomalies' if use_anomalies else 'daily trend'
 
     idx[axis] = 1  # slope
     interc = DataArray(params[tuple(idx)], coords=coords, dims=dimens, name='intercept', attrs=attrs)
-    interc.attrs['standard_name'] += '_intercept'
+    set_attrs(interc, 'standard_name', add='_intercept', default='intercept') #interc.attrs['standard_name'] += '_intercept'
 
     if params.shape[axis] > 2:
         if method == 'theil_sen':

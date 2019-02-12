@@ -40,7 +40,7 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
             raise ValueError("Lon, Lat and Values need same size", lon.size, lat.size, values.size)
 
     projection = kwargs.get('projection', cpy.crs.PlateCarree())
-    ax = plt.axes(projection=projection, figsize=kwargs.get('figsize', (12, 6)))
+    ax = plt.axes(projection=projection)
 
     if ocean:
         ax.add_feature(cpy.feature.OCEAN, zorder=0)

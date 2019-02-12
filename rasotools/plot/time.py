@@ -190,7 +190,7 @@ def breakpoints(data, dim='date', thres=2, startend=False, borders=None, filled=
         ax.axvline(x=ib,
                    ls=kwargs.get('ls', '-'),
                    lw=kwargs.get('lw', 1),
-                   label=kwargs.get('label', None),
+                   label=kwargs.get('label', None) if i == 0 else None,
                    marker=kwargs.get('marker', None),
                    alpha=kwargs.get('alpha', 1),
                    color=kwargs.get('color', 'k'))  # Line Plot

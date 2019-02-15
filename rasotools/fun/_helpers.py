@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'kwc', 'kwu']
+__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'check_kw', 'update_kw', 'suche123']
 
 
 def now():
@@ -59,8 +59,8 @@ def _print_string(*args, adddate=False, **kwargs):
         return " ".join([str(i) for i in args])
 
 
-def dict2str(tmp):
-    return ', '.join("{!s}={!r}".format(k, v) for (k, v) in tmp.items())
+def dict2str(tmp, sep=', '):
+    return sep.join("{!s}={!r}".format(k, v) for (k, v) in tmp.items())
 
 
 def print_fixed(liste, sep, width, offset=0):
@@ -78,12 +78,22 @@ def print_fixed(liste, sep, width, offset=0):
     return out
 
 
-def kwc(name, value=None, **kwargs):
+def check_kw(name, value=None, **kwargs):
     if value is None:
         return name in kwargs.keys()
     return kwargs.get(name, None) == value
 
 
-def kwu(name, value, **kwargs):
+def update_kw(name, value, **kwargs):
     kwargs.update({name: value})
     return kwargs
+
+
+def suche123(eins, zwei, drei, test=None):
+    if eins is not  test:
+        return eins
+    elif zwei is not test:
+        return zwei
+    else:
+        return drei
+

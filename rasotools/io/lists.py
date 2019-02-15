@@ -6,7 +6,7 @@ import pandas as pd
 __all__ = ['read_radiosondelist']
 
 
-def read_radiosondelist(filename=None, minimal=True, with_igra=False):
+def read_radiosondelist(filename=None, minimal=True, with_igra=False, **kwargs):
     from .. import get_data
 
     if filename is None:

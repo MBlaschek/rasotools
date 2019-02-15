@@ -122,10 +122,6 @@ def winds(data, u='u', v='v', dim='pres', barbs=True, ax=None, logy=False, ytick
     return ax
 
 
-def filled():
-    pass
-
-
 def boxplot(data, dim='pres', ax=None, vline=None, yticklabels=None, logy=False, **kwargs):
     import pandas as pd
     from xarray import DataArray
@@ -162,10 +158,11 @@ def boxplot(data, dim='pres', ax=None, vline=None, yticklabels=None, logy=False,
 
     set_labels(kwargs, xlabel=get_info(data),
                title=get_info(data), ylabel=dim + ' [%s]' % lev_units)
-    idata = idata.rename(columns=lambda x: int(x / 100)).sort_index(axis=1, ascending=False)
+    idata = idata.sort_index(axis=1, ascending=False)
     idata.boxplot(ax=ax, vert=False, return_type='axes', sym='+')
     if vline is not None:
         ax.axvline(x=vline, color='k', lw=1)
+
     ax.grid(ls='--')
     ax.set_title(kwargs.get('title'))
     ax.set_ylabel(kwargs.get('ylabel'))

@@ -2,7 +2,7 @@
 import numpy as np
 
 from . import dep
-from ..fun import message, nancount, kwc, kwu
+from ..fun import message, nancount, check_kw, update_kw
 
 __all__ = ['mean', 'percentile', 'percentile_reference']
 
@@ -86,10 +86,10 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
                                        **kwargs)
 
         # Debug infos
-        if kwc('verbose', value=2, **kwargs):
+        if check_kw('verbose', value=2, **kwargs):
             sdata = stats(data, iref, isample, axis=axis, a=before)
             sdata = np.array_str(sdata, precision=2, suppress_small=True)
-            message(sdata, **kwu('level', 1, **kwargs))
+            message(sdata, **update_kw('level', 1, **kwargs))
     return data
 
 
@@ -156,10 +156,10 @@ def percentile(data, breaks, axis=0, percentilen=None, sample_size=130, borders=
         data[isample] = dep.percentile(data[iref], data[isample], percentilen, axis=axis, sample_size=sample_size,
                                        max_sample=max_sample, borders=borders, ratio=ratio)
         # Debug infos
-        if kwc('verbose', value=2, **kwargs):
+        if check_kw('verbose', value=2, **kwargs):
             sdata = stats(data, iref, isample, axis=axis, a=before)
             sdata = np.array_str(sdata, precision=2, suppress_small=True)
-            message(sdata, **kwu('level', 1, **kwargs))
+            message(sdata, **update_kw('level', 1, **kwargs))
 
     return data
 
@@ -291,12 +291,12 @@ def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_
                                         ratio=ratio,
                                         apply=xdata[isample])
         # Debug infos
-        if kwc('verbose', value=2, **kwargs):
+        if check_kw('verbose', value=2, **kwargs):
             sdata = stats(xdata, iref, isample, axis=axis, a=before)
             sdata = np.array_str(sdata, precision=2, suppress_small=True)
             if i == (nb - 2):
                 sdata = '[    i     #S          B      dB       S      dS       R   #R   ]\n' + sdata
-            message(sdata, **kwu('level', 1, **kwargs))
+            message(sdata, **update_kw('level', 1, **kwargs))
 
     return xdata
 

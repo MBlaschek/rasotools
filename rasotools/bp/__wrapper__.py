@@ -2,7 +2,7 @@
 import numpy as np
 from xarray import Dataset, DataArray, set_options
 
-from ..fun import message, dict2str, kwu
+from ..fun import message, dict2str, update_kw, suche123
 
 __all__ = ['apply_threshold', 'snht', 'adjust_mean', 'adjust_percentiles', 'adjust_percentiles_ref',
            'adjust_reference_period', 'breakpoint_statistics', 'get_breakpoints', 'breakpoint_data', 'adjust_table']
@@ -31,7 +31,7 @@ def snht(data, dim='date', var=None, dep=None, suffix=None, window=1460, missing
 
     if isinstance(data, DataArray):
         idata = data.copy()
-        var = idata.name if idata.name is not None else 'var'
+        var = suche123(idata.name, var, 'var')
     else:
         ivars = list(data.data_vars)
         if len(ivars) == 1:
@@ -248,7 +248,7 @@ adjustments these with a mean  adjustment going back in time.
 
     idata = data[name].copy()
     values = idata.values
-    breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
+    breaks = get_breakpoints(data[breakname], dim=dim, **update_kw('level', 1, **kwargs))
     axis = idata.dims.index(dim)
     params = idata.attrs.copy()  # deprecated (xr-patch)
 
@@ -256,7 +256,7 @@ adjustments these with a mean  adjustment going back in time.
 
     params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90)})
 
-    message(dict2str(params), **kwu('level', 1, **kwargs))
+    message(dict2str(params), **update_kw('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
 
     data[name + suffix] = (idata.dims, adj.mean(values, breaks, axis=axis, **kwargs))
@@ -322,7 +322,7 @@ adjustments these with a mean and a percentile adjustment going back in time.
         percentilen = np.arange(0, 101, 10)
 
     values = idata.values
-    breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
+    breaks = get_breakpoints(data[breakname], dim=dim, **update_kw('level', 1, **kwargs))
     axis = idata.dims.index(dim)
     params = idata.attrs.copy()  # deprecated (xr-patch)
 
@@ -330,7 +330,7 @@ adjustments these with a mean and a percentile adjustment going back in time.
 
     params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90)})
 
-    message(dict2str(params), **kwu('level', 1, **kwargs))
+    message(dict2str(params), **update_kw('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
 
     data[name + suffix] = (
@@ -396,7 +396,7 @@ adjustments these with a mean and a percentile adjustment going back in time.
 
     values = data[name].values.copy()
     avalues = data[adjname].values.copy()
-    breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
+    breaks = get_breakpoints(data[breakname], dim=dim, **update_kw('level', 1, **kwargs))
     axis = data[name].dims.index(dim)
     params = data[name].attrs.copy()  # deprecated (xr-patch)
 
@@ -404,7 +404,7 @@ adjustments these with a mean and a percentile adjustment going back in time.
 
     params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90)})
 
-    message(dict2str(params), **kwu('level', 1, **kwargs))
+    message(dict2str(params), **update_kw('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
     #
     # Adjust reference to a reference period?
@@ -458,7 +458,7 @@ def adjust_reference_period(data, name, refname, breakname, dim='date', suffix='
     values = data[refname].values.copy()  # RASO
     avalues = data[name].values.copy()  # Reanalysis (ERA)
 
-    breaks = get_breakpoints(data[breakname], dim=dim, **kwu('level', 1, **kwargs))
+    breaks = get_breakpoints(data[breakname], dim=dim, **update_kw('level', 1, **kwargs))
     axis = data[name].dims.index(dim)
     params = data[name].attrs.copy()  # deprecated (xr-patch)
 
@@ -466,7 +466,7 @@ def adjust_reference_period(data, name, refname, breakname, dim='date', suffix='
 
     params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90)})
 
-    message(dict2str(params), **kwu('level', 1, **kwargs))
+    message(dict2str(params), **update_kw('level', 1, **kwargs))
     stdn = data[name].attrs.get('standard_name', name)
     #
     # Adjust name with refname in reference period
@@ -780,7 +780,7 @@ def breakpoint_statistics(data, breakname, dim='date', agg='mean', borders=None,
 
     nb = len(ibreaks)
     if nb == 0:
-        message("Warning no Breakpoints found", **kwu('level', 0, **kwargs))  # Always print
+        message("Warning no Breakpoints found", **update_kw('level', 0, **kwargs))  # Always print
         return
 
     if borders is None:

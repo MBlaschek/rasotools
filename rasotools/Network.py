@@ -95,8 +95,9 @@ class Network(object):
     def open_data(self, filename_pattern=None, directory=None, drop_variables=None):
         from .fun import find_files
         files = find_files(directory, filename_pattern, recursive=True)
+        # filter with sonde ids ?
         index = pd.Index(self.sondes, name='sondes')
-        self.data = xr.open_mfdataset(files, concat_dim=index, drop_variables=drop_variables)
+        self.data = xr.open_mfdataset(files, concat_dim=index)
         print(self.data)
 
     def table(self, idents=None, filename=None):

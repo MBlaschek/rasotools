@@ -4,7 +4,7 @@ import pickle
 
 import numpy as np
 import xarray as xr
-from .fun import message, dict2str, kwu
+from .fun import message, dict2str, update_kw
 
 __all__ = ["Radiosonde", "open_radiosonde", "load_radiosonde"]
 
@@ -165,7 +165,7 @@ class Radiosonde(object):
                 ds = xr.open_dataset(ifilename, **xwargs)
 
             if ds is not None:
-                message(iname, **kwu('level', 1, **kwargs))
+                message(iname, **update_kw('level', 1, **kwargs))
                 setattr(self.data, iname, ds)
 
         if self.ident == 'Unknown':
@@ -191,47 +191,58 @@ class Radiosonde(object):
             self.data.__dict__[new_name] = self.data.__dict__.pop(old_name)
             message(old_name, " > ", new_name, **kwargs)
 
-    def count(self, name, dim=None, per='M', **kwargs):
-        """ Count available data per time period (M)
+    def get_info(self, add_attrs=False, **kwargs):
+        from io.lists import read_radiosondelist
+        sondes = read_radiosondelist(**update_kw('minmal', False, **kwargs))
+        if self.ident in sondes.index:
+            infos = sondes.xs(self.ident).to_dict()
+            print(dict2str(infos, sep='\n'))
+            if add_attrs:
+                self.attrs(**infos)
+        else:
+            message("No information found: %s" %self.ident, **kwargs)
 
-        Args:
-            name (str): dataset name
-            dim (str): datetime dimension
-            per (str): period (M, A,...)
-            **kwargs:
-
-        Returns:
-            xr.Dataset : counts
-        """
-        from .met.time import count_per
-        if name in self.data:
-            tmp = {}
-            for ivar, idata in self.data[name].data_vars.items():
-                tmp[ivar] = count_per(idata, dim=dim, per=per)
-            return xr.Dataset(tmp)
-        message('Unknown Input', name, 'Choose: ', list(self.data), **kwargs)
-        return None
-
-    def count_times(self, name, dim=None, **kwargs):
-        """ Count sounding times
-
-        Args:
-            name (str): dataset name
-            dim (str): datetime dimension
-            **kwargs:
-
-        Returns:
-            xr.Dataset : counts per sounding time
-        """
-        from .met.time import count_per_times
-        if name in self.data:
-            tmp = {}
-            for ivar, idata in self.data[name].data_vars.items():
-                if dim in idata.dims:
-                    tmp[ivar] = count_per_times(idata, dim=dim)
-            return xr.Dataset(tmp)
-        message('Unknown Input', name, 'Choose: ', list(self.data), **kwargs)
-        return None
+    # def count(self, name, dim=None, per='M', **kwargs):
+    #     """ Count available data per time period (M)
+    #
+    #     Args:
+    #         name (str): dataset name
+    #         dim (str): datetime dimension
+    #         per (str): period (M, A,...)
+    #         **kwargs:
+    #
+    #     Returns:
+    #         xr.Dataset : counts
+    #     """
+    #     from .met.time import count_per
+    #     if name in self.data:
+    #         tmp = {}
+    #         for ivar, idata in self.data[name].data_vars.items():
+    #             tmp[ivar] = count_per(idata, dim=dim, per=per)
+    #         return xr.Dataset(tmp)
+    #     message('Unknown Input', name, 'Choose: ', list(self.data), **kwargs)
+    #     return None
+    #
+    # def count_times(self, name, dim=None, **kwargs):
+    #     """ Count sounding times
+    #
+    #     Args:
+    #         name (str): dataset name
+    #         dim (str): datetime dimension
+    #         **kwargs:
+    #
+    #     Returns:
+    #         xr.Dataset : counts per sounding time
+    #     """
+    #     from .met.time import count_per_times
+    #     if name in self.data:
+    #         tmp = {}
+    #         for ivar, idata in self.data[name].data_vars.items():
+    #             if dim in idata.dims:
+    #                 tmp[ivar] = count_per_times(idata, dim=dim)
+    #         return xr.Dataset(tmp)
+    #     message('Unknown Input', name, 'Choose: ', list(self.data), **kwargs)
+    #     return None
 
     def list_store(self, directory=None, varinfo=False, ncinfo=False):
         import time
@@ -431,3 +442,11 @@ def list_in_list(jlist, ilist):
         else:
             pass
     return out
+
+
+def create_network(name, ids=None, lon=None, lat=None, dist=None, dataname=None):
+    # return a dataset with only these sondes
+    # location + distance
+    # read radiosonde-list
+
+    pass

@@ -467,7 +467,7 @@ def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h',
     import numpy as np
     import pandas as pd
     from xarray import DataArray
-    from ..fun import message, kwu
+    from ..fun import message, update_kw
 
     kwargs['mname'] = kwargs.get('mname', 'std_hours')
 
@@ -515,9 +515,9 @@ def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h',
                                                                                               1)
                 if np.any(counts > 0):
                     j = k[np.argmax(counts)]  # use the one with max data / min time diff
-                    message(itime, " < ", dates[j], -1 * diff[j], n, counts, **kwu('level', 2, **kwargs))
+                    message(itime, " < ", dates[j], -1 * diff[j], n, counts, **update_kw('level', 2, **kwargs))
                 else:
-                    message(itime, "NaN", **kwu('level', 2, **kwargs))
+                    message(itime, "NaN", **update_kw('level', 2, **kwargs))
                     continue
 
             else:
@@ -531,7 +531,7 @@ def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h',
                 new['delay'].values[i] = -1 * diff[j]  # pd.Timestamp(dates[j]).hour  # datetime of minimum
                 message(itime, " < ", dates[j], -1 * diff[j], n,
                         np.sum(np.isfinite(data.values[tuple(oldindex)]), axis=0),
-                        **kwu('level', 1, **kwargs))
+                        **update_kw('level', 1, **kwargs))
                 indices += [(i[0], j)]
                 nn += 1
 
@@ -583,7 +583,7 @@ def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False
     Returns:
 
     """
-    from ..fun import message, array2dataset, kwu
+    from ..fun import message, array2dataset, update_kw
     from pandas import Index
     from xarray import DataArray, concat
 
@@ -598,9 +598,9 @@ def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False
     data = data.copy()
 
     if standardize:
-        data = standard_sounding_times(data, dim=dim, times=times, **kwu('level', 1, **kwargs))
+        data = standard_sounding_times(data, dim=dim, times=times, **update_kw('level', 1, **kwargs))
     else:
-        data = sel_hours(data, dim=dim, times=times, **kwu('level', 1, **kwargs))  # selection
+        data = sel_hours(data, dim=dim, times=times, **update_kw('level', 1, **kwargs))  # selection
 
     data = dict(data.groupby(dim + '.hour'))
     for ikey in data.keys():

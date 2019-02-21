@@ -125,7 +125,7 @@ def to_xarray(ident, filename=None, save=True, levels=None, force=False, **kwarg
         #
         data = xr.Dataset(new)
         data.attrs.update({'ident': ident, 'source': 'ECMWF', 'info': 'MARS ODB', 'dataset': 'ERA-INTERIM',
-                           'levels': 'plevs [%d -%d] #%d' %(min(levels), max(levels), len(levels)),
+                           'levels': 'plevs [%d -%d] #%d' % (min(levels), max(levels), len(levels)),
                            'processed': 'UNIVIE, IMG', 'libs': config.libinfo})
         #
         # Station Information

@@ -112,9 +112,9 @@ def climatology(data, dim='date', period=None, keep_attrs=True):
         data (DataArray): Input Data
         dim (str): datetime dimension
         period (slice): datetime selection
-
+        keep_attrs (bool) : xarray keep attributes
     Returns:
-        DataArray : Climate Means
+        DataArray : Climate Monthly Means
     """
     from xarray import DataArray
     if not isinstance(data, DataArray):
@@ -131,13 +131,14 @@ def anomaly(data, dim='date', period=None, keep_attrs=True):
 
     Args:
         data (DataArray) : Inputdata
-        dim (str)
+        dim (str) : datetime dimension
         period (slice, str) : Indices of Dates for calculation
-
+        keep_attrs (bool) : xarray keep attributes
     Returns:
         DataArray : Anomalies
     """
     from xarray import DataArray, set_options
+    from ..fun import set_attrs
     if not isinstance(data, DataArray):
         raise ValueError("Requires a numpy array (data)")
 
@@ -152,10 +153,7 @@ def anomaly(data, dim='date', period=None, keep_attrs=True):
         data = data.groupby(dim + '.month') - clim
 
     data = data.drop('month')
-    if 'standard_name' in data.attrs:
-        data.attrs['standard_name'] += '_ano'
-    else:
-        data.attrs['standard_name'] = 'anomaly'
+    set_attrs(data.attrs, 'standard_name', add='_ano', default='anomaly')
     data.attrs['period'] = clim.attrs['period']
     return data
 
@@ -217,27 +215,27 @@ def trend(data, dim='date', use_anomalies=True, period=None, min_periods=3, meth
     idx = [slice(None)] * params.ndim
     idx[axis] = 0  # slope
     slope = DataArray(params[tuple(idx)] * per, coords=coords, dims=dimens, name='slope', attrs=attrs)
-    set_attrs(slope, 'units', add='/day', default='1/day') #slope.attrs['units'] += '/day'
-    set_attrs(slope, 'standard_name', add='_trend', default='trend') #slope.attrs['standard_name'] += '_trend'
+    set_attrs(slope, 'units', add='/day', default='1/day')
+    set_attrs(slope, 'standard_name', add='_trend', default='trend')
     slope.attrs['cell_method'] = 'daily trend of anomalies' if use_anomalies else 'daily trend'
 
     idx[axis] = 1  # slope
     interc = DataArray(params[tuple(idx)], coords=coords, dims=dimens, name='intercept', attrs=attrs)
-    set_attrs(interc, 'standard_name', add='_intercept', default='intercept') #interc.attrs['standard_name'] += '_intercept'
+    set_attrs(interc, 'standard_name', add='_intercept', default='intercept')
 
     if params.shape[axis] > 2:
         if method == 'theil_sen':
             idx[axis] = 2  # slope lower
             aslope = DataArray(params[tuple(idx)] * per, coords=coords, dims=dimens, name='slope_min', attrs=attrs)
-            aslope.attrs['units'] += '/day'
-            aslope.attrs['standard_name'] += '_trend_min'
+            set_attrs(aslope, 'units', add='/day', default='1/day')
+            set_attrs(aslope, 'standard_name', add='_trend_min', default='trend_min')
             aslope.attrs['alpha'] = alpha
             aslope.attrs['cell_method'] = 'daily trend of anomalies' if use_anomalies else 'daily trend'
 
             idx[axis] = 3  # slope upper
             bslope = DataArray(params[tuple(idx)] * per, coords=coords, dims=dimens, name='slope_max', attrs=attrs)
-            bslope.attrs['units'] += '/day'
-            bslope.attrs['standard_name'] += '_trend_max'
+            set_attrs(bslope, 'units', add='/day', default='1/day')
+            set_attrs(bslope, 'standard_name', add='_trend_max', default='trend_max')
             bslope.attrs['alpha'] = alpha
             bslope.attrs['cell_method'] = 'daily trend of anomalies' if use_anomalies else 'daily trend'
             return Dataset({'slope': slope, 'intercept': interc, 'lower': aslope, 'upper': bslope})
@@ -246,18 +244,18 @@ def trend(data, dim='date', use_anomalies=True, period=None, min_periods=3, meth
         idx[axis] = 2  # R-value
         rslope = DataArray(params[tuple(idx)] ** 2, coords=coords, dims=dimens, name='r_squared', attrs=attrs)
         rslope.attrs['units'] = '1'
-        rslope.attrs['standard_name'] += '_r_squared'
+        set_attrs(rslope, 'standard_name', add='_r_squared', default='r_squared')
 
         idx[axis] = 3  # p-value
         bslope = DataArray(params[tuple(idx)], coords=coords, dims=dimens, name='p_value', attrs=attrs)
         bslope.attrs['units'] = '1'
-        bslope.attrs['standard_name'] += '_p_value'
+        set_attrs(bslope, 'standard_name', add='_p_value', default='p_value')
         bslope.attrs['cell_method'] = 'p-value for null hypothesis(slope==0)'
 
         idx[axis] = 4  # std err
         sslope = DataArray(params[tuple(idx)], coords=coords, dims=dimens, name='std_err', attrs=attrs)
-        sslope.attrs['units'] += '/day'
-        sslope.attrs['standard_name'] += '_std_err'
+        set_attrs(sslope, 'units', add='/day', default='1/day')
+        set_attrs(sslope, 'standard_name', add='_std_err', default='std_err')
         sslope.attrs['cell_method'] = 'standard error of slope'
 
         return Dataset({'slope': slope, 'intercept': interc, 'r_squared': rslope, 'p_value': bslope, 'std_err': sslope})
@@ -451,7 +449,6 @@ def covariance(x, y, dim='date', period=None):
                            keep_attrs=True)
 
     corr = nancov(x, y, dim, axis)
-    corr.name += '_cov'
     set_attrs(corr, 'standard_name', add='_cov', default='covariance')
     set_attrs(corr, 'units', add='2', default='2')
     set_attrs(corr, 'cell_method', set='covariance with %s' % y.name)

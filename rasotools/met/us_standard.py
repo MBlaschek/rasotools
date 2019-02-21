@@ -115,3 +115,6 @@ def _interp_mod(values, pout, pin, dropna=True, min_values=4):
         return np.interp(pout, pin, values, left=np.nan, right=np.nan)  # no extrapolation
     else:
         return np.full(len(pout), np.nan)
+
+# download regression limits from RTTOV
+# https://nwpsaf.eu/downloads/rtcoef_rttov12/PROFILES_ECMWF_83_2016_54L_regression_limits.txt?8447b5&8447b5

@@ -114,7 +114,7 @@ def var(data, dim='date', lev=None, colorlevels=None, logy=False, yticklabels=No
 
     """
     from xarray import DataArray
-    from ._helpers import line, contour, get_info, set_labels, plot_levels as pl, plot_arange as pa
+    from ._helpers import line, contour, get_info, set_labels,plot_levels as pl, plot_arange as pa
 
     if not isinstance(data, DataArray):
         raise ValueError('Requires a DataArray', type(data))
@@ -135,6 +135,10 @@ def var(data, dim='date', lev=None, colorlevels=None, logy=False, yticklabels=No
     else:
         set_labels(kwargs, extend='both', xlabel=get_info(data[dim]), ylabel=get_info(data[lev]),
                    title=get_info(data), clabel=get_info(data))
+        if 'units' in data[lev].attrs:
+            units = data[lev].attrs['units']
+            if units == 'hPa':
+                kwargs.update({'levfactor': 1})
 
         return contour(ax, data[dim].values, data[lev].values, data.values, logy=logy, colorlevels=colorlevels,
                        yticklabels=yticklabels, legend=legend, **kwargs)

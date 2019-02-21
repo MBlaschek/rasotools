@@ -12,17 +12,29 @@ __all__ = ["Radiosonde", "open_radiosonde", "load_radiosonde"]
 def dim_summary(obj):
     """ Auxilliary class function for printing
     """
+    if hasattr(obj, 'data_vars'):
+        return "%d vars [%s]" % (len(obj.data_vars), ", ".join(["%s(%s)" % (i, j) for i, j in obj.dims.items()]))
+
     if hasattr(obj, 'shape'):
         i = np.shape(obj)
-    elif hasattr(obj, 'len'):
-        i = len(obj)
-    elif hasattr(obj, 'size'):
+        if i != ():
+            return i
+
+    if hasattr(obj, 'size'):
         i = np.size(obj)
-    elif hasattr(obj, 'data_vars'):
-        i = "%d vars [%s]" % (len(obj.data_vars), ", ".join(["%s(%s)" % (i, j) for i, j in obj.dims.items()]))
-    else:
-        i = obj
-    return i
+        if i == 1:
+            return obj
+        else:
+            return i
+
+    if isinstance(obj, (list, tuple, dict)):
+        i = len(obj)
+        if i == 1:
+            return obj
+        else:
+            return i
+
+    return obj
 
 
 def formatting(obj):
@@ -58,7 +70,7 @@ class Radiosonde(object):
         else:
             self.data = Bunch()  # empty
         self.attrs = Bunch(**kwargs)
-        self.aux = Bunch()
+        #self.aux = Bunch()
 
     def __repr__(self):
         summary = u"Radiosonde (%s)\n" % self.ident
@@ -68,9 +80,9 @@ class Radiosonde(object):
         if len(list(self.attrs)) > 0:
             summary += "\nGlobal Attributes: \n"
             summary += repr(self.attrs)
-        if len(list(self.aux)) > 0:
-            summary += "\nAuxiliary Information: \n"
-            summary += repr(self.aux)
+        # if len(list(self.aux)) > 0:
+        #     summary += "\nAuxiliary Information: \n"
+        #     summary += repr(self.aux)
         return summary
 
     def __getitem__(self, item):
@@ -192,13 +204,14 @@ class Radiosonde(object):
             message(old_name, " > ", new_name, **kwargs)
 
     def get_info(self, add_attrs=False, **kwargs):
-        from io.lists import read_radiosondelist
-        sondes = read_radiosondelist(**update_kw('minmal', False, **kwargs))
+        from .io.lists import read_radiosondelist
+        sondes = read_radiosondelist(**update_kw('minimal', False, **kwargs))
         if self.ident in sondes.index:
             infos = sondes.xs(self.ident).to_dict()
-            print(dict2str(infos, sep='\n'))
+            message(Bunch(**infos), **kwargs)
             if add_attrs:
-                self.attrs(**infos)
+                self.attrs.__dict__.update(infos)
+                message("Attributes added", **update_kw('verbose', 1, **kwargs))
         else:
             message("No information found: %s" %self.ident, **kwargs)
 

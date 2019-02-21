@@ -180,10 +180,10 @@ def contour(ax, dates, plevs, test, logy=False, colorlevels=None, yticklabels=No
     if yticklabels is not None:
         yticklabels = np.asarray(yticklabels)  # can not calc on list
         ax.set_yticks(yticklabels)
-        ax.set_yticklabels(np.int_(yticklabels / 100.))
+        ax.set_yticklabels(np.int_(yticklabels / kwargs.get('levfactor', 100)))
     else:
         ax.set_yticks(plevs[::2])
-        ax.set_yticklabels(np.int_(plevs[::2] / 100.))
+        ax.set_yticklabels(np.int_(plevs[::2] / kwargs.get('levfactor', 100)))
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)

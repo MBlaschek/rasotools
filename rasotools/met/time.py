@@ -461,6 +461,20 @@ def covariance(x, y, dim='date', period=None):
 
 
 def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h', return_indices=False, **kwargs):
+    """ Standardize datetime to times per date, try to fill gaps
+
+    Args:
+        data (DataArray): Input DataArray (xarray)
+        dim (str): datetime dimension
+        times (tuple): sounding times
+        span (int): plus minus sounding time for filling gaps
+        freq (str): frequency of sounding times
+        return_indices (bool): return indices for alignment
+        **kwargs:
+
+    Returns:
+        DataArray : datetime standardized DataArray
+    """
     import numpy as np
     import pandas as pd
     from xarray import DataArray

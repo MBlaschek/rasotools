@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
-import pickle
 
 import numpy as np
 import xarray as xr
-from .fun import message, dict2str, update_kw
 
-__all__ = ["Radiosonde", "open_radiosonde", "load_radiosonde"]
+from .fun import message, update_kw, dict_add
+
+__all__ = ["Radiosonde", "open_radiosonde"]
 
 
 def dim_summary(obj):
@@ -49,6 +49,7 @@ class Bunch(object):
         return u"\n".join("%-10s : %s" % (i, formatting(getattr(self, i))) for i in self.__dict__.keys())
 
     def __iter__(self):
+        # iter(self.__dict__)   # does the same
         return (x for x in self.__dict__.keys())
 
     def __getitem__(self, item):
@@ -70,7 +71,7 @@ class Radiosonde(object):
         else:
             self.data = Bunch()  # empty
         self.attrs = Bunch(**kwargs)
-        #self.aux = Bunch()
+        self.directory = None
 
     def __repr__(self):
         summary = u"Radiosonde (%s)\n" % self.ident
@@ -80,9 +81,8 @@ class Radiosonde(object):
         if len(list(self.attrs)) > 0:
             summary += "\nGlobal Attributes: \n"
             summary += repr(self.attrs)
-        # if len(list(self.aux)) > 0:
-        #     summary += "\nAuxiliary Information: \n"
-        #     summary += repr(self.aux)
+        if self.directory is not None:
+            summary += "\nDirectory: " + self.directory
         return summary
 
     def __getitem__(self, item):
@@ -99,89 +99,65 @@ class Radiosonde(object):
         if key in self.data:
             delattr(self.data, key)
 
-    def add(self, name, variable=None, filename=None, directory=None, xwargs={}, **kwargs):
+    def add(self, name, filename=None, directory=None, xwargs={}, **kwargs):
         """ Add data to radiosonde class object [container]
 
         Args:
             name (str): used as filename and/or as data name
-            variable (str): variable names to look for
             filename (str): filename to read from (netcdf)
             directory (str): directory of radiosonde store, default config rasodir
-            xwargs (dict): keyword arguments to xarray open_dataset
+            xwargs (dict): xarray open_dataset keywords
         """
         from . import config
 
-        if not isinstance(name, list):
-            name = [name]
+        if self.directory is not None:
+            directory = self.directory
 
         if directory is None:
             if 'rasodir' in config and os.path.isdir(config.rasodir):
-                directory = config.rasodir
+                directory = config.rasodir + '/' + str(self.ident) + '/'
             else:
-                directory = '.'
+                directory = './' + str(self.ident) + '/'
+            message(directory, **kwargs)
 
         if filename is not None:
             if '.nc' not in filename:
                 print("Warning can read only NetCDF / Xarray open_dataset formats")
 
-            if not os.path.isfile(filename):
-                if directory is not None:
-                    if not os.path.isfile(directory + '/' + filename):
-                        filename = directory + '/' + str(self.ident) + '/' + filename
-                    else:
-                        filename = directory + '/' + filename
+            if '*' not in filename:
+                if not os.path.isfile(filename):
+                    if directory is not None:
+                        if not os.path.isfile(directory + '/' + filename):
+                            filename = directory + '/' + str(self.ident) + '/' + filename
+                        else:
+                            filename = directory + '/' + filename
 
-        if variable is not None:
-            if not isinstance(variable, list):
-                variable = [variable]
-
-        for iname in name:
-            if filename is None:
-                if os.path.isfile(directory + '/' + str(self.ident) + '/' + iname + '.nc'):
-                    ifilename = directory + '/' + str(self.ident) + '/' + iname + '.nc'
-                elif os.path.isfile(directory + '/' + iname + '.nc'):
-                    ifilename = directory + '/' + iname + '.nc'
-                else:
-                    message("Not found:", iname, directory)
-                    continue
-
+        if filename is None:
+            if os.path.isfile(directory + '/' + name + '.nc'):
+                filename = directory + '/' + name + '.nc'
             else:
-                ifilename = filename
+                message("Not found:", name, directory, **kwargs)
+                return
 
-            message("Reading ...", ifilename, **kwargs)
-            ds = xr.open_dataset(ifilename, **xwargs)
+        if '*' in filename:
+            try:
+                message("Reading ...", filename, **kwargs)
+                self.data[name] = xr.open_mfdataset(filename, **xwargs)
+            except OSError:
+                message("Reading ...", directory + '/' + filename, **kwargs)
+                self.data[name] = xr.open_mfdataset(directory + '/' + filename, **xwargs)
 
-            if variable is not None:
-                if isinstance(ds, xr.Dataset):
-                    ivars = list_in_list(variable, list(ds.data_vars))
-                    ds = ds[ivars]
+        else:
+            message("Reading ...", filename, **kwargs)
+            self.data[name] = xr.open_dataset(filename, **xwargs)
 
-                    if len(ds.data_vars) == 0:
-                        ds = None
-
-                    elif len(ds.data_vars) == 1:
-                        ds = ds[ds.data_vars[0]]
-
-                    else:
-                        pass
-
-                elif isinstance(ds, xr.DataArray):
-                    ivars = list_in_list(variable, [ds.name])
-                    if len(ivars) == 0:
-                        ds = None
-
-                else:
-                    ds = None
-
-            else:
-                ds = xr.open_dataset(ifilename, **xwargs)
-
-            if ds is not None:
-                message(iname, **update_kw('level', 1, **kwargs))
-                setattr(self.data, iname, ds)
-
-        if self.ident == 'Unknown':
-            print("Please change the IDENT")
+        # merge dictionaries and append common
+        self.attrs.__dict__ = dict_add(vars(self.attrs), dict(self.data[name].attrs))
+        if 'ident' in self.attrs:
+            if self.ident != self.attrs['ident']:
+                print("Warning different idents: ", self.ident, self.attrs['ident'])
+            if self.ident == "":
+                self.ident = self.attrs['ident']
 
     def clear(self, exclude=None, **kwargs):
         if exclude is None:
@@ -198,6 +174,10 @@ class Radiosonde(object):
                 del self.data[idata]
                 message(idata, **kwargs)
 
+        for iatt in list(self.attrs):
+            if iatt not in exclude:
+                del self.attrs[iatt]
+
     def rename(self, old_name, new_name, **kwargs):
         if old_name in self.data:
             self.data.__dict__[new_name] = self.data.__dict__.pop(old_name)
@@ -213,49 +193,7 @@ class Radiosonde(object):
                 self.attrs.__dict__.update(infos)
                 message("Attributes added", **update_kw('verbose', 1, **kwargs))
         else:
-            message("No information found: %s" %self.ident, **kwargs)
-
-    # def count(self, name, dim=None, per='M', **kwargs):
-    #     """ Count available data per time period (M)
-    #
-    #     Args:
-    #         name (str): dataset name
-    #         dim (str): datetime dimension
-    #         per (str): period (M, A,...)
-    #         **kwargs:
-    #
-    #     Returns:
-    #         xr.Dataset : counts
-    #     """
-    #     from .met.time import count_per
-    #     if name in self.data:
-    #         tmp = {}
-    #         for ivar, idata in self.data[name].data_vars.items():
-    #             tmp[ivar] = count_per(idata, dim=dim, per=per)
-    #         return xr.Dataset(tmp)
-    #     message('Unknown Input', name, 'Choose: ', list(self.data), **kwargs)
-    #     return None
-    #
-    # def count_times(self, name, dim=None, **kwargs):
-    #     """ Count sounding times
-    #
-    #     Args:
-    #         name (str): dataset name
-    #         dim (str): datetime dimension
-    #         **kwargs:
-    #
-    #     Returns:
-    #         xr.Dataset : counts per sounding time
-    #     """
-    #     from .met.time import count_per_times
-    #     if name in self.data:
-    #         tmp = {}
-    #         for ivar, idata in self.data[name].data_vars.items():
-    #             if dim in idata.dims:
-    #                 tmp[ivar] = count_per_times(idata, dim=dim)
-    #         return xr.Dataset(tmp)
-    #     message('Unknown Input', name, 'Choose: ', list(self.data), **kwargs)
-    #     return None
+            message("No information found: %s" % self.ident, **kwargs)
 
     def list_store(self, directory=None, varinfo=False, ncinfo=False):
         import time
@@ -263,10 +201,13 @@ class Radiosonde(object):
         from .io.info import view
         from .fun import print_fixed
 
+        if self.directory is not None:
+            directory = self.directory
+
         if directory is None:
             directory = config.rasodir
+            directory += "/%s/" % self.ident
 
-        directory += "/%s/" % self.ident
         if os.path.isdir(directory):
             summe = 0
             print("Available Files (Datasets): ")
@@ -295,7 +236,7 @@ class Radiosonde(object):
         else:
             print("Store not found!")
 
-    def to_netcdf(self, name, filename=None, directory=None, force=False, xargs={}, **kwargs):
+    def to_netcdf(self, name, filename=None, directory=None, force=False, add_global=True, **kwargs):
         """Write each data variable to NetCDF 4
 
         Args:
@@ -303,8 +244,8 @@ class Radiosonde(object):
             filename (str): filename
             directory (str): directory
             force (bool): force new file
-            xargs (dict): keywords as dict to XArray function to_netcdf
-
+        Result:
+            bool : Status
         """
         from . import config
 
@@ -312,17 +253,21 @@ class Radiosonde(object):
             name = [name]
 
         if directory is None:
-            if 'rasodir' in config:
+            if self.directory is not None:
+                directory = self.directory
+
+            elif 'rasodir' in config:
                 if os.path.isdir(config.rasodir):
-                    directory = config.rasodir
+                    directory = config.rasodir + '/' + str(self.ident) + '/'
             else:
-                directory = '.'
-        directory += '/' + str(self.ident) + '/'
-        message("Output directory:", directory, **kwargs)
+                directory = './' + str(self.ident) + '/'
+
+        message("to dir:", directory, **kwargs)
         attrs = vars(self.attrs)
 
         for iname in name:
-            if iname in self.data:
+            if iname in self.data and isinstance(self.data[iname], (xr.DataArray, xr.Dataset)):
+
                 if filename is None:
                     ifilename = directory + '/' + iname + '.nc'
                 else:
@@ -330,136 +275,44 @@ class Radiosonde(object):
 
                 # Create directory if necessary
                 if os.path.isdir(os.path.dirname(ifilename)):
-                    message("Creating directory: ", ifilename, **kwargs)
-                    os.makedirs(os.path.dirname(ifilename), exist_ok=True)  # no Errors
+                    idir = os.path.dirname(ifilename)
+                    message("makedir: ", idir, **kwargs)
+                    os.makedirs(idir, exist_ok=True)  # no Errors
+
+                message("Writing", ifilename, **kwargs)
+
+                iobj = getattr(self.data, iname)
+                if len(iobj.attrs) or add_global:
+                    iobj.attrs.update(attrs)  # add global attributes
 
                 if force:
-                    xargs['mode'] = 'w'
+                    iobj.to_netcdf(ifilename, mode='w', **kwargs)
                     force = False
 
                 elif os.path.isfile(ifilename):
-                    xargs['mode'] = 'a'
+                    iobj.to_netcdf(ifilename, mode='a', **kwargs)
 
                 else:
-                    xargs['mode'] = 'w'
+                    iobj.to_netcdf(ifilename, mode='w', **kwargs)
 
-                message("Writing", ifilename, dict2str(xargs), **kwargs)
-                iobj = getattr(self.data, iname)
-                iobj.attrs.update(attrs)  # add attributes
-
-                # Xarray Object or not?
-                if hasattr(iobj, 'to_netcdf'):
-                    iobj.to_netcdf(ifilename, **xargs)
-                else:
-                    print("Object", iname, "has no to_netcdf", type(iobj))
-        # fin
-
-    def dump(self, name=None, filename=None, directory=None, **kwargs):
-        """ Pickle dump the whole radiosonde class object
-
-        Args:
-            name (str): name of file or ident
-            filename (str): filename
-            directory (str): directory of radiosonde store, default config rasodir
-
-        """
-        from . import config
-
-        if name is None:
-            name = self.ident
-
-        if 'rasodir' in config:
-            if os.path.isdir(config.rasodir):
-                directory = config.rasodir
-
-        if 'directory' in self.attrs:
-            directory = getattr(self.attrs, 'directory', '.')
-
-        if directory is None:
-            directory = '.'
-
-        message("Using", directory, **kwargs)
-
-        if filename is None:
-            filename = directory + '/' + name + '.pkl'
-
-        message("Writing", filename, **kwargs)
-        with open(filename, 'wb') as f:
-            pickle.dump(self, f)  # Pickle everything
+            else:
+                print("[DATA]", iname, "no Xarray object? ", type(iobj))
 
 
-def open_radiosonde(name, ident=None, variable=None, filename=None, directory=None, xwargs={}, **kwargs):
+def open_radiosonde(name, ident=None, filename=None, directory=None, **kwargs):
     """ Create a Radiosonde object from opening a dataset
 
     Args:
         name (str): used as filename and/or as data name
         ident (str): radiosonde wmo or igra id
-        variable (list, str): variable names to look for
         filename (str): filename to read from (netcdf)
         directory (str): directory of radiosonde store, default config rasodir
-        xwargs (dict): keyword arguments to xarray open_dataset
 
     Returns:
         Radiosonde : Radiosonde class object
     """
     if ident is None:
         ident = "Unknown"
-        print("No Radiosonde Identifier specified !!!")
-
     out = Radiosonde(ident)
-    out.add(name, variable=variable, filename=filename, directory=directory, xwargs=xwargs, **kwargs)
+    out.add(name, filename=filename, directory=directory, **kwargs)
     return out
-
-
-def load_radiosonde(name=None, filename=None, directory=None, **kwargs):
-    """ Read a radiosonde class dump file
-
-    Args:
-        name (str): name of dump in rasodir
-        filename (str): filename of dump file
-        directory (str): directory of file (name)
-
-    Returns:
-        Radiosonde : Radiosonde class object
-    """
-    if name is None and filename is None:
-        raise ValueError("Requires either name or filename")
-
-    if filename is None:
-        if directory is None:
-            filename = directory + '/' + name + '.pkl'
-
-    message("Reading", filename, **kwargs)
-    with open(filename, 'rb') as f:
-        out = pickle.load(f)
-    return out
-
-
-def list_in_list(jlist, ilist):
-    """ compare lists and use wildcards
-
-    Args:
-        jlist (list): list of search patterns
-        ilist (list): list of available choices
-
-    Returns:
-        list : common elements
-    """
-    out = []
-    for ivar in jlist:
-        if '*' in ivar:
-            new = [jvar for jvar in ilist if ivar.replace('*', '') in jvar]
-            out.extend(new)
-        elif ivar in ilist:
-            out.append(ivar)
-        else:
-            pass
-    return out
-
-
-def create_network(name, ids=None, lon=None, lat=None, dist=None, dataname=None):
-    # return a dataset with only these sondes
-    # location + distance
-    # read radiosonde-list
-
-    pass

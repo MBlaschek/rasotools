@@ -4,33 +4,33 @@ __all__ = ['dataset_to_hours']
 
 
 def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suffix='', interpolate=False, levels=None,
-                     verbose=0):
+                     **kwargs):
     """ convert all DataArrays in the Dataset to hours
 
     Args:
-        data:
-        std:
-        variables:
-        dim:
-        lev:
-        suffix:
-        interpolate:
-        levels:
-        verbose:
-
+        data (Dataset): xarray Dataset
+        std (str): name of DataArray to act as target for the rest
+        variables (list): variables to consider
+        dim (str): datetime dimension
+        lev (str): pressure level dimension
+        suffix (str): suffix for new Dataset
+        interpolate (bool): interpolate along pressure levels
+        levels (list): interpolation pressure levels
+        **kwargs
     Returns:
-
+        Dataset : rearanged and standardized Dataset
     """
     from .time import standard_sounding_times, sel_hours
     from .convert import vertical_interpolation
-    from ..fun import message
+    from ..fun import message, update_kw
     from xarray import Dataset, concat
     from pandas import Index
     data = data.copy()
     new = Dataset()
     if std is not None:
-        new[std + suffix], idx = standard_sounding_times(data[std], return_indices=True, verbose=verbose, level=1)
-        message("Standard: ", std, new[std+suffix].shape, verbose=verbose)
+        new[std + suffix], idx = standard_sounding_times(data[std], return_indices=True,
+                                                         **update_kw('level', 1, kwargs))
+        message("Standard: ", std, new[std + suffix].shape, **kwargs)
 
     for i in list(data.data_vars):
         if i == std:
@@ -40,7 +40,7 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
             continue
 
         if interpolate and 'pres' in data[i].dims:
-            tmp = vertical_interpolation(data[i], lev, levels=levels, verbose=verbose, level=1)
+            tmp = vertical_interpolation(data[i], lev, levels=levels, **update_kw('level', 1, kwargs))
             new[i + suffix] = sel_hours(tmp)
         else:
             new[i + suffix] = sel_hours(data[i])
@@ -54,7 +54,7 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
                 iold[data[i].dims.index(dim)] = idx[:, 1]
                 new[i + suffix].values[tuple(inew)] = data[i].values[tuple(iold)]  # copy same
 
-        message("Converted:", i + suffix, verbose=verbose)
+        message("Converted:", i + suffix, **kwargs)
 
     data = dict(new.groupby(dim + '.hour'))
     for ikey in data.keys():

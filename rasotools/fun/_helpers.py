@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'check_kw', 'update_kw', 'suche123']
+__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'check_kw', 'update_kw', 'suche123', 'dict_add']
 
 
 def now():
@@ -90,10 +90,42 @@ def update_kw(name, value, **kwargs):
 
 
 def suche123(eins, zwei, drei, test=None):
-    if eins is not  test:
+    if eins is not test:
         return eins
     elif zwei is not test:
         return zwei
     else:
         return drei
 
+
+def dict_add(d1,d2):
+    d2 = d2.copy()
+    for i,j in d1.items():
+        if i in d2.keys():
+            if j != d2[i]:
+                d1[i] += ',' + d2[i]
+                d2.pop(i)
+    d1.update(d2)
+    return d1
+
+
+def list_in_list(jlist, ilist):
+    """ compare lists and use wildcards
+
+    Args:
+        jlist (list): list of search patterns
+        ilist (list): list of available choices
+
+    Returns:
+        list : common elements
+    """
+    out = []
+    for ivar in jlist:
+        if '*' in ivar:
+            new = [jvar for jvar in ilist if ivar.replace('*', '') in jvar]
+            out.extend(new)
+        elif ivar in ilist:
+            out.append(ivar)
+        else:
+            pass
+    return out

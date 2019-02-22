@@ -36,7 +36,7 @@ config.wkdir = _os.getcwd()
 config.igradir = ''
 config.marsdir = ''
 config.outdir = _os.getcwd() + '/results'
-config.rasodir = _os.getcwd() + '/raso_archive'
+config.rasodir = _os.getcwd() + '/archive'
 config.std_plevels = [1000., 2000., 3000., 5000., 7000., 10000., 15000., 20000., 25000., 30000., 40000., 50000., 70000.,
                       85000., 92500., 100000.]
 config.era_plevels = [1000., 2000., 3000., 5000., 7000., 10000., 12500., 15000., 17500., 20000., 22500., 25000., 30000.,

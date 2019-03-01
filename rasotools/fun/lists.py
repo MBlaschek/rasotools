@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ['read_radiosondelist']
+__all__ = ['combined', 'igra', 'wmo']
 
 
-def read_radiosondelist(filename=None, minimal=True, with_igra=False, **kwargs):
+def combined(filename=None, minimal=True, with_igra=False, **kwargs):
     import pandas as pd
     from .. import get_data
 
@@ -88,7 +88,7 @@ def igra(filename=None):
     return out
 
 
-def Obstype(data, typ):
+def obstype(data, typ):
     import pandas as pd
     out = []
     for i in data.values:
@@ -107,7 +107,7 @@ def Obstype(data, typ):
     return pd.Series(out, index=data.index)
 
 
-def wmolist(ifile, minimal=True, only_raso=True):
+def wmo(ifile, minimal=True, only_raso=True):
     """ Read WMO Radiosonde Station List
 
     ANTON(T)    : Antarctic Observing Network upper-air station (TEMP)
@@ -158,11 +158,11 @@ def wmolist(ifile, minimal=True, only_raso=True):
     # require variables named: id, lon,lat,alt,name,count
     wd['id'] = wd.id.map('{:06.0f}'.format)
     rasotypes = ['RBSN(T)', 'RBSN(P)', 'RBSN(ST)', 'RBSN(SP)', 'GUAN', 'ANTON(T)', 'R']
-    status = pd.concat([Obstype(wd.ObsRems, ityp) for ityp in rasotypes], axis=1, keys=rasotypes)
+    status = pd.concat([obstype(wd.ObsRems, ityp) for ityp in rasotypes], axis=1, keys=rasotypes)
 
     print(status.sum())
 
-    wd['raso'] = np.any([Obstype(wd.ObsRems, ityp) for ityp in rasotypes], axis=0)
+    wd['raso'] = np.any([obstype(wd.ObsRems, ityp) for ityp in rasotypes], axis=0)
     if only_raso:
         wd = wd[wd.raso]
 

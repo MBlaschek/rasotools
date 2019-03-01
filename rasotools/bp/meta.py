@@ -178,3 +178,77 @@ def wmo_code_table():
     from .. import get_data
 
     return pd.read_csv(get_data('Common_C02_20181107_en.txt'))
+
+
+def open_igra_metadata(filename):
+    """ Read IGRAv2 _metadata file according to readme
+
+    igra2-_metadata-readme.txt
+
+    Documentation for IGRA Station History Information
+    Accompanying IGRA Version 2.0.0b1
+    August 2014
+
+    Args:
+        filename (str):  igra2-_metadata.txt
+
+    Returns:
+        DataFrame
+    """
+    import pandas as pd
+    infos = """
+    IGRAID         1- 11   Character
+    WMOID         13- 17   Integer
+    NAME          19- 48   Character
+    NAMFLAG       50- 50   Character
+    LATITUDE      52- 60   Real
+    LATFLAG       62- 62   Character
+    LONGITUDE     64- 72   Real
+    LONFLAG       74- 74   Character
+    ELEVATION     76- 81   Real
+    ELVFLAG       83- 83   Character
+    YEAR          85- 88   Integer
+    MONTH         90- 91   Integer
+    DAY           93- 94   Integer
+    HOUR          96- 97   Integer
+    DATEIND       99- 99   Integer
+    EVENT        101-119   Character
+    ALTIND       121-122   Character
+    BEFINFO      124-163   Character
+    BEFFLAG      164-164   Character
+    LINK         166-167   Character
+    AFTINFO      169-208   Character
+    AFTFLAG      209-209   Character
+    REFERENCE    211-235   Character
+    COMMENT      236-315   Character
+    UPDCOM       316-346   Character
+    UPDDATE      348-354   Character
+    """
+    import numpy as np
+    colspecs = []
+    header = []
+    types = {}
+    for iline in infos.splitlines():
+        if iline == '':
+            continue
+        ih = iline[0:11].strip().lower()
+        header.append(ih)
+        ii = int(iline[13:16]) - 1
+        ij = int(iline[17:20])
+        colspecs.append((ii, ij))
+        it = iline[22:].strip()
+        if it == 'Character':
+            it = 'str'
+        elif it == 'Real':
+            it = 'float'
+        else:
+            it = 'int'
+        types[ih] = it
+
+    data = pd.read_fwf(filename, colspecs=colspecs, header=None, dtype=types, names=header)
+    data = data.replace('nan', '')
+    data['date'] = pd.to_datetime((data.year * 1000000 +
+                                   np.where(data.month.values == 99, 6, data.month.values) * 10000 +
+                                   np.where(data.day.values == 99, 15, data.day.values) * 100 +
+                                   np.where(data.hour.values == 99, 0, data.hour.values)).apply(str), format='%Y%m%d%H')
+    return data

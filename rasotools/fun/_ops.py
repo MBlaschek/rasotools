@@ -12,9 +12,9 @@ def array2dataset(data, dim, rename=None):
         rename (dict): renaming policy
 
     Returns:
-        Dataset
+        Dataset :
     """
-    from xarray import Dataset, DataArray
+    from xarray import DataArray
 
     if not isinstance(data, DataArray):
         raise ValueError('Requires a DataArray', type(data))
@@ -32,7 +32,7 @@ def array2dataset(data, dim, rename=None):
 
     data = data.to_dataset(dim=dim)
     for i, j in tmp.items():
-        data[i] = j
+        data[i] = j  # add as Coords / Variables
 
     if rename is not None:
         return data.rename(rename)

@@ -460,20 +460,21 @@ def covariance(x, y, dim='date', period=None):
 #
 
 
-def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h', return_indices=False, **kwargs):
+def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h', return_indices=False, only_time=False,
+                            **kwargs):
     """ Standardize datetime to times per date, try to fill gaps
 
     Args:
-        data (DataArray): Input DataArray (xarray)
+        data (xarray.DataArray): Input DataArray
         dim (str): datetime dimension
         times (tuple): sounding times
         span (int): plus minus sounding time for filling gaps
         freq (str): frequency of sounding times
         return_indices (bool): return indices for alignment
-        **kwargs:
+        only_time (bool): when multiple times can be set std times, use only time difference for selection
 
     Returns:
-        DataArray : datetime standardized DataArray
+        xarray.DataArray : datetime standardized DataArray
     """
     import numpy as np
     import pandas as pd
@@ -515,7 +516,7 @@ def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h',
         n = np.sum(np.abs(diff) <= span)  # number of soundings within time window
         if n > 0:
             i = np.where(alldates == itime)[0]  # index for new array
-            if n > 1:
+            if n > 1 and not only_time:
                 # many choices, count data
                 k = np.where(np.abs(diff) <= span)[0]
                 oldindex[axis] = k
@@ -578,17 +579,18 @@ def sel_hours(data, dim='date', times=(0, 12), **kwargs):
 
     kwargs['mname'] = kwargs.get('mname', 'sel_hours')
     message('Selecting times:', times, data.shape, **kwargs)
-    return data.sel(**{dim: data[dim].dt.hour.isin(times)})  # selection
+    return data.sel(**{dim: data[dim].dt.hour.isin(times)}).copy()  # selection
 
 
 def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False, **kwargs):
     """ Split Array into separate Arrays by time
 
     Args:
-        data:
-        dim:
-        standardize:
-        times:
+        data (xarray.DataArray): Input data
+        dim (str): datetime dimension
+        standardize (bool): apply standardization process or select only
+        times (list): std hours
+        as_dataset (bool): return hour as variables
         **kwargs:
 
     Returns:

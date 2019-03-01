@@ -22,10 +22,8 @@ def to_rh(temp, dpd=None, spec_humi=None, press=None, method='HylandWexler', **k
         press (DataArray,str): air pressure or dim name
         method (str): Saturation water vapor pressure formulation
 
-        **kwargs:
-
     Returns:
-        DataArray : relative humidity
+        DataArray : relative humidity [1]
     """
     from xarray import DataArray
     from .esat import svp
@@ -93,7 +91,7 @@ def to_vp(temp, dpd=None, rel_humi=None, spec_humi=None, press=None, method='Hyl
 
     Returns
     -------
-    data
+        DataArray : water vapor pressure [Pa]
     """
     from xarray import DataArray
     from .esat import svp
@@ -190,7 +188,7 @@ def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, method='Hyl
         method: Saturation water vapor pressure formulation
 
     Returns:
-        dpd: dewpoint depression
+        DataArray: dewpoint depression [K]
     """
     from xarray import DataArray
     from .esat import svp
@@ -591,7 +589,7 @@ def vertical_interpolation(data, dim, levels=None, **kwargs):
         raise ValueError("Requires a DataArray class object")
 
     if dim not in data.dims:
-        raise ValueError("Requires a valid dimension", dim, "of",data.dims)
+        raise ValueError("Requires a valid dimension", dim, "of", data.dims)
 
     if levels is None:
         levels = config.std_plevels
@@ -600,7 +598,7 @@ def vertical_interpolation(data, dim, levels=None, **kwargs):
     axis = data.dims.index(dim)
     pin = data[dim].values
     values = np.apply_along_axis(profile, axis, data.values, pin, levels)
-    data = data.reindex({dim:levels})
+    data = data.reindex({dim: levels})
     data.values = values
     cmethod = "%s: intp(%d > %d)" % (dim, len(pin), len(levels))
     if 'cell_method' in data.attrs:
@@ -610,7 +608,8 @@ def vertical_interpolation(data, dim, levels=None, **kwargs):
     return data
 
 
-def adjust_dpd30(data, num_years=10, datedim='date', subset=slice(None, '1994'), value=30, bins=None, thres=1, return_mask=False,
+def adjust_dpd30(data, num_years=10, datedim='date', subset=slice(None, '1994'), value=30, bins=None, thres=1,
+                 return_mask=False,
                  **kwargs):
     """ Specifc Function to remove a certain value from the Histogram (DPD)
 
@@ -666,7 +665,7 @@ def adjust_dpd30(data, num_years=10, datedim='date', subset=slice(None, '1994'),
 
     if return_mask:
         dmask = data.copy()
-        dmask.loc[::] = False   # Everything false
+        dmask.loc[::] = False  # Everything false
         dmask.loc = mask
         dmask.name += '_mask'
         dmask.attrs['units'] = '1'

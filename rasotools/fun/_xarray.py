@@ -6,7 +6,7 @@ def xarray_function_wrapper(x, wfunc=None, **kwargs):
 
     Args:
         x (DataArray): Input data
-        func (callable): function to call, e.g.: np.nanpercentile
+        wfunc (callable): function to call, e.g.: np.nanpercentile
         **kwargs: all arguments to function
 
     Keyword Args:

@@ -1,6 +1,11 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__all__ = ['open_mars_odb']
+
+__doc__ = """
+Read ECMWF ODB file and convert it to netcdf and standard pressure levels
+
+"""
 
 
 def open_mars_odb(ident, variables=None, filename=None, directory=None, force_read_ascii=False, levels=None, **kwargs):
@@ -371,29 +376,41 @@ def dewpoint_ecmwf(t, rh, **kwargs):
     return (17.502 * 273.16 - 32.19 * lnpart) / (17.502 - lnpart)
 
 
-_metadata = {'temp': {'units': 'K', 'standard_name': 'air_temperature'},
-             'temp_fg_dep': {'units': 'K', 'standard_name': 'first guess departure'},
-             'temp_an_dep': {'units': 'K', 'standard_name': 'analysis departure'},
-             'temp_biascorr': {'units': 'K', 'standard_name': 'bias adjustment'},
-             'rhumi': {'units': '1', 'standard_name': 'relative_humidity'},
-             'rhumi_fg_dep': {'units': '1', 'standard_name': 'relative_humidity_first_guess_departure'},
-             'rhumi_an_dep': {'units': '1', 'standard_name': 'relative_humidity_analysis_departure'},
-             'rhumi_biascorr': {'units': '1', 'standard_name': 'relative_humidity_bias_adjusstment'},
-             'qhumi': {'units': 'kg/kg', 'standard_name': 'specific_humidity'},
-             'qhumi_fg_dep': {'units': 'kg/kg', 'standard_name': 'specific_humidity_first_guess_departure'},
-             'qhumi_an_dep': {'units': 'kg/kg', 'standard_name': 'specific_humidity_analysis_departure'},
-             'qhumi_biascorr': {'units': 'kg/kg', 'standard_name': 'specific_humidity_bias_adjustment'},
-             'dewp': {'units': 'K', 'standard_name': 'dew_point'},
-             'dewp_fg_dep': {'units': 'K', 'standard_name': 'dew_point_first_guess_departure'},
-             'dewp_an_dep': {'units': 'K', 'standard_name': 'dew_point_analysis_departure'},
-             'dewp_biascorr': {'units': 'K', 'standard_name': 'dew_point_bias_adjustment'},
-             'uwind': {'units': 'm/s', 'standard_name': 'eastward_wind'},
-             'uwind_fg_dep': {'units': 'm/s', 'standard_name': 'eastward_wind_first_guess_departure'},
-             'uwind_an_dep': {'units': 'm/s', 'standard_name': 'eastward_wind_analysis_departure'},
-             'uwind_biascorr': {'units': 'm/s', 'standard_name': 'eastward_wind_bias_adjustment'},
-             'vwind': {'units': 'm/s', 'standard_name': 'northward_wind'},
-             'vwind_fg_dep': {'units': 'm/s', 'standard_name': 'northward_wind_first_guess_departure'},
-             'vwind_an_dep': {'units': 'm/s', 'standard_name': 'northward_wind_analysis_departure'},
-             'vwind_biascorr': {'units': 'm/s', 'standard_name': 'northward_wind_bias_adjustment'},
+_metadata = {'t': {'units': 'K', 'standard_name': 'air_temperature'},
+             't_fg_dep': {'units': 'K', 'standard_name': 'first guess departure'},
+             't_an_dep': {'units': 'K', 'standard_name': 'analysis departure'},
+             't_biascorr': {'units': 'K', 'standard_name': 'bias adjustment'},
+             'rh': {'units': '1', 'standard_name': 'relative_humidity'},
+             'rh_fg_dep': {'units': '1', 'standard_name': 'relative_humidity_first_guess_departure'},
+             'rh_an_dep': {'units': '1', 'standard_name': 'relative_humidity_analysis_departure'},
+             'rh_biascorr': {'units': '1', 'standard_name': 'relative_humidity_bias_adjusstment'},
+             'q': {'units': 'kg/kg', 'standard_name': 'specific_humidity'},
+             'q_fg_dep': {'units': 'kg/kg', 'standard_name': 'specific_humidity_first_guess_departure'},
+             'q_an_dep': {'units': 'kg/kg', 'standard_name': 'specific_humidity_analysis_departure'},
+             'q_biascorr': {'units': 'kg/kg', 'standard_name': 'specific_humidity_bias_adjustment'},
+             'td': {'units': 'K', 'standard_name': 'dew_point'},
+             'td_fg_dep': {'units': 'K', 'standard_name': 'dew_point_first_guess_departure'},
+             'td_an_dep': {'units': 'K', 'standard_name': 'dew_point_analysis_departure'},
+             'td_biascorr': {'units': 'K', 'standard_name': 'dew_point_bias_adjustment'},
+             'u': {'units': 'm/s', 'standard_name': 'eastward_wind'},
+             'u_fg_dep': {'units': 'm/s', 'standard_name': 'eastward_wind_first_guess_departure'},
+             'u_an_dep': {'units': 'm/s', 'standard_name': 'eastward_wind_analysis_departure'},
+             'u_biascorr': {'units': 'm/s', 'standard_name': 'eastward_wind_bias_adjustment'},
+             'v': {'units': 'm/s', 'standard_name': 'northward_wind'},
+             'v_fg_dep': {'units': 'm/s', 'standard_name': 'northward_wind_first_guess_departure'},
+             'v_an_dep': {'units': 'm/s', 'standard_name': 'northward_wind_analysis_departure'},
+             'v_biascorr': {'units': 'm/s', 'standard_name': 'northward_wind_bias_adjustment'},
              'dpd': {'units': 'K', 'standard_name': 'dew_point_depression'}
              }
+
+
+def usage():
+    print("""
+    important conversion tool for ECMWF ODB dump to netcdf and standard pressure levels
+    """)
+
+
+if __name__ == "__main__":
+    import sys
+    # call [odb file] -o -levels -ident
+    pass

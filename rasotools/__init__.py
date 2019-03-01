@@ -1,7 +1,7 @@
-__version__ = '0.2'
+__version__ = '0.3'
 __author__ = 'MB'
 __status__ = 'dev'
-__date__ = 'Do Nov 22 16:45:24 CET 2018'
+__date__ = 'Di Feb 26 11:07:48 CET 2019'
 __institute__ = 'Univie, IMGW'
 __github__ = 'git@github.com:MBlaschek/rasotools.git'
 __doc__ = """
@@ -16,14 +16,13 @@ from .Radiosonde import *
 from .Network import *
 from . import fun
 from . import met
-from . import io
 from . import grid
 from . import bp
 from . import plot
 
 
 def _getlibs():
-    "Get library version information for printing"
+    """Get library version information for printing"""
     import numpy
     import pandas
     import xarray
@@ -93,8 +92,8 @@ def load_config(filename='rasoconfig.json'):
 
         for ikey, ival in variables.items():
             setattr(config, ikey, ival)
-
-        print("Configuration loaded: ", filename)
+            print("[CONFIG] ", ikey, ":", repr(ival))
+        print("[CONFIG] ", filename)
 
 
 def dump_config(filename='rasoconfig.json'):

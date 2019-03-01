@@ -29,7 +29,7 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
     new = Dataset()
     if std is not None:
         new[std + suffix], idx = standard_sounding_times(data[std], return_indices=True,
-                                                         **update_kw('level', 1, kwargs))
+                                                         **update_kw('level', 1, **kwargs))
         message("Standard: ", std, new[std + suffix].shape, **kwargs)
 
     for i in list(data.data_vars):
@@ -40,7 +40,7 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
             continue
 
         if interpolate and 'pres' in data[i].dims:
-            tmp = vertical_interpolation(data[i], lev, levels=levels, **update_kw('level', 1, kwargs))
+            tmp = vertical_interpolation(data[i], lev, levels=levels, **update_kw('level', 1, **kwargs))
             new[i + suffix] = sel_hours(tmp)
         else:
             new[i + suffix] = sel_hours(data[i])

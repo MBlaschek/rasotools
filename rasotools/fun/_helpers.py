@@ -98,13 +98,26 @@ def suche123(eins, zwei, drei, test=None):
         return drei
 
 
-def dict_add(d1,d2):
+def dict_add(d1, d2):
     d2 = d2.copy()
-    for i,j in d1.items():
+    for i, j in d1.items():
         if i in d2.keys():
-            if j != d2[i]:
-                d1[i] += ',' + d2[i]
-                d2.pop(i)
+            if ',' in j:
+                j = j.split(',')
+            else:
+                j = [j]
+
+            if ',' in d2[i]:
+                k = d2[i].split(',')
+            else:
+                k = [d2[i]]
+
+            for l in k:
+                if l not in j:
+                    j.append(l)
+
+            d1[i] = ",".join(j)
+            d2.pop(i)
     d1.update(d2)
     return d1
 

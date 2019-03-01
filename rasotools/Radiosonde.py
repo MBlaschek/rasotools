@@ -155,7 +155,8 @@ class Radiosonde(object):
         self.attrs.__dict__ = dict_add(vars(self.attrs), dict(self.data[name].attrs))
         if 'ident' in self.attrs:
             if self.ident != self.attrs['ident']:
-                print("Warning different idents: ", self.ident, self.attrs['ident'])
+                message("Warning different idents: ", self.ident, ">", self.attrs['ident'],
+                        **update_kw('level', -1, **kwargs))
             if self.ident == "":
                 self.ident = self.attrs['ident']
 
@@ -184,8 +185,8 @@ class Radiosonde(object):
             message(old_name, " > ", new_name, **kwargs)
 
     def get_info(self, add_attrs=False, **kwargs):
-        from .io.lists import read_radiosondelist
-        sondes = read_radiosondelist(**update_kw('minimal', False, **kwargs))
+        from fun.lists import combined
+        sondes = combined(**update_kw('minimal', False, **kwargs))
         if self.ident in sondes.index:
             infos = sondes.xs(self.ident).to_dict()
             message(Bunch(**infos), **kwargs)
@@ -198,8 +199,7 @@ class Radiosonde(object):
     def list_store(self, directory=None, varinfo=False, ncinfo=False):
         import time
         from . import config
-        from .io.info import view
-        from .fun import print_fixed
+        from .fun import print_fixed, store_view
 
         if self.directory is not None:
             directory = self.directory
@@ -226,7 +226,7 @@ class Radiosonde(object):
                             print("Variables:")
                             print(print_fixed(list(f.data_vars), ',', 80, offset=10))
                     elif ncinfo:
-                        view(directory + ifile)
+                        store_view(directory + ifile)
                     else:
                         pass
                 print('_' * 80)
@@ -236,7 +236,7 @@ class Radiosonde(object):
         else:
             print("Store not found!")
 
-    def to_netcdf(self, name, filename=None, directory=None, force=False, add_global=True, **kwargs):
+    def to_netcdf(self, name, filename=None, directory=None, force=False, add_global=True, xwargs={}, **kwargs):
         """Write each data variable to NetCDF 4
 
         Args:
@@ -286,14 +286,14 @@ class Radiosonde(object):
                     iobj.attrs.update(attrs)  # add global attributes
 
                 if force:
-                    iobj.to_netcdf(ifilename, mode='w', **kwargs)
+                    xwargs.update({'mode': 'w'})
                     force = False
-
-                elif os.path.isfile(ifilename):
-                    iobj.to_netcdf(ifilename, mode='a', **kwargs)
-
                 else:
-                    iobj.to_netcdf(ifilename, mode='w', **kwargs)
+                    if os.path.isfile(ifilename):
+                        xwargs.update({'mode': 'a'})
+                    else:
+                        xwargs.update({'mode': 'w'})
+                iobj.to_netcdf(ifilename, **xwargs)
 
             else:
                 print("[DATA]", iname, "no Xarray object? ", type(iobj))

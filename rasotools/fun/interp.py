@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 
 
-__all__ = ['dataframe']
-
-
 def dataframe(data, level_column, levels=None, variables=None, min_levels=3, keep_old_levels=False, **kwargs):
     """ Interpolate a database DataFrame according to pressure levels in level_column
 
@@ -96,41 +93,59 @@ def table(data, level_column, levels, min_levels=3, keep=False):
 
 
 def profile(data, plevs, new_plevs):
-    """ Modified np.interp Function for filtering NAN
+    """ Modified numpy.interp Function for filtering nan
 
-    Args
-    ----
-        data : ndarray
-            Input Data
-        plevs : ndarray
-            Input pressure levels
-        new_plevs : ndarray
-            Output pressure levels
+    Args:
+        data (numpy.ndarray): Input data
+        plevs (numpy.ndarray): Input pressure levels
+        new_plevs (numpy.ndarray): Output pressure levels
 
-    Returns
-    -------
-    ndarray
-        size of new_plevs
+    Returns:
+        numpy.ndarray :  size of new_plevs
     """
     import numpy as np
-    # data.groupby(pressure).mean()  # remove duplicates with slightly different values
     data = np.squeeze(data)  # remove 1-dims
     ix = np.isfinite(data)  # only finite values
     s = ix.sum()  # enough data left ?
     if s > 0:
-        #if s > min_levels:
+        plevs, data = np.unique([plevs[ix], data[ix]], axis=1)
+        data = np.interp(np.log(new_plevs), np.log(plevs), data, left=np.nan, right=np.nan)
+        return data
+    return np.full_like(new_plevs, np.nan)  # Nothing to do, but keep shape
+
+
+def profile_uncertainty(data, uncert, plevs, new_plevs):
+    """ Modified np.interp Function for filtering nan and using uncertainty
+
+    Args:
+        data (numpy.ndarray): Input data
+        uncert (numpy.ndarray): Input uncertainty
+        plevs (numpy.ndarray): Input pressure levels
+        new_plevs (numpy.ndarray): Output pressure levels
+
+    Returns:
+        tuple :
+            numpy.ndarray : interpolated data
+            numpy.ndarray : interpolated uncertainty
+    """
+    import numpy as np
+    try:
+        import uncertainties as un
+
+    except ImportError as e:
+        print("Error missing package: uncertainties", repr(e))
+        raise e
+
+    data = np.squeeze(data)  # remove 1-dims
+    ix = np.isfinite(data)  # only finite values
+    s = ix.sum()  # enough data left ?
+    if s > 0:
         plevs, data = np.unique([plevs[ix], data[ix]], axis=1)
         # todo add uncertainty from interpolation, due to spacing
         # summe der ableitung zum quadrat mal unsicherheit quadrat
         data = np.interp(np.log(new_plevs), np.log(plevs), data, left=np.nan, right=np.nan)
         return data
-        # jx = np.in1d(plevs[ix], new_plevs)  # index of finite values
-        # if len(jx) > 0:
-        #     kx = np.in1d(new_plevs, plevs[ix])  # index of finite values in new pressure levels
-        #     out = np.full_like(new_plevs, np.nan)
-        #     out[kx] = data[ix][jx]
-        #     return out  # just a few values
-    return np.full_like(new_plevs, np.nan)  # Nothing to do, but keep shape
+
 
 #
 # def interp_profile(data, plevs, new_plevs, min_levels=3):

@@ -7,12 +7,6 @@ from ..fun import message
 __all__ = ['extract_locations']
 
 
-def extract_locations_per_time(data, lon, lat, dates, axis=0, **kwargs):
-    # use a time varying lon, lat for extraction
-
-    pass
-
-
 def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None, debug=False, **kwargs):
     """ Extract location(s) from a DataArray
 
@@ -60,7 +54,6 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
     if (lon < 0).any():
         lon = np.where(lon < 0, lon + 360., lon)
         message("Adjusting INPUT Longitudes ...", **kwargs)
-
 
     order = data.dims  # tuple
     ilon = order.index(name_lon)

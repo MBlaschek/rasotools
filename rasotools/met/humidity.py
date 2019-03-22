@@ -349,7 +349,7 @@ def dewpoint_ECMWF(e, t=None, rh=None, **kwargs):
         if rh is None:
             raise ValueError('requires t and rh or e')
 
-        e = svp(t, method='foeewmo') * rh
+        e = svp(t, method='FOEEWMO') * rh
 
     lnpart = np.log(e / 611.21)
     return (17.502 * 273.16 - 32.19 * lnpart) / (17.502 - lnpart)
@@ -372,7 +372,7 @@ def dewpoint_JMA(e, method='HylandWexler', tol=0.001, **kwargs):
     -------
     td          dew point       [K]
     """
-    from ..tools import fuzzy_equal
+    from ..fun import fuzzy_equal
     verbose = kwargs.get('verbose', 0)
 
     @np.vectorize

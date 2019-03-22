@@ -19,10 +19,11 @@ def snht(data, dim='date', var=None, dep=None, suffix=None, window=1460, missing
         suffix (str): add to name of new variables
         window (int): running window (timesteps)
         missing (int): allowed missing values in window
-        **kwargs:
 
     Returns:
         Dataset : test statistics
+        or
+        DataArray
     """
     from .det import test
 

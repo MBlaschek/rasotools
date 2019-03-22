@@ -17,13 +17,13 @@ def fig_vertical(n=2, ratios=(1, 3), figsize=None, **kwargs):
 
 def snht(data, snht_var, break_var, dim='date', lev='pres', thres=50, upper=None, lower=None, **kwargs):
     f, ax = fig_horizont(**kwargs)
-    _, cs = time.threshold(data[snht_var], lev=lev, ax=ax[1], logy=False, legend=False, **kwargs)
+    _, cs = time.threshold(data[snht_var], dim=dim, lev=lev, ax=ax[1], logy=False, legend=False, **kwargs)
     ax[1].set_title('')
     if break_var is not None:
-        time.breakpoints(data[break_var], ax=ax[1], color='k')
+        time.breakpoints(data[break_var], ax=ax[1], color='k', dim=dim)
     time.summary(data[snht_var], dim=dim, thres=thres, ax=ax[0], xlabel='', ylabel='Sum SNHT', **kwargs)
     if break_var is not None:
-        time.breakpoints(data[break_var], ax=ax[0], color='k')
+        time.breakpoints(data[break_var], ax=ax[0], color='k', dim=dim)
     f.get_axes()[2].set_ylabel('Sum sign. Levs')
     f.subplots_adjust(right=0.9)
     cax = f.add_axes([0.91, 0.15, 0.015, 0.5])

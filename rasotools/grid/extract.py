@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-import xarray as xr
-from ..fun import message
-
 __all__ = ['extract_locations']
 
 
-def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None, debug=False, **kwargs):
+def extract_locations(data, lon, lat, method='bilinear', raw=False, dim=None, debug=False, **kwargs):
     """ Extract location(s) from a DataArray
 
     Args:
@@ -17,14 +13,18 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
         method : str
             Interpolation Method: point, bilinear, distance
         raw : bool
-        conat : str, list, Index
+        dim : str, list, Index
             concat along this new dimension
         debug : bool
 
     Returns:
         list or DataArray
     """
-    if not isinstance(data, xr.DataArray):
+    import numpy as np
+    from xarray import DataArray, concat
+    from ..fun import message
+
+    if not isinstance(data, DataArray):
         raise ValueError()
 
     if isinstance(lon, (int, float)):
@@ -116,7 +116,7 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
                 dattrs['cell_method'] = "%s,%s: intp(%s)" % (name_lon, name_lat, method)
                 newcoords[name_lon] = jlon - 360. if jlon > 180 else jlon
                 newcoords[name_lat] = jlat
-                tmp = xr.DataArray(tmp, coords=newcoords, dims=iorder, name=data.name, attrs=dattrs)
+                tmp = DataArray(tmp, coords=newcoords, dims=iorder, name=data.name, attrs=dattrs)
             locations.append(tmp.copy())
 
         except Exception as e:
@@ -129,8 +129,8 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, concat=None,
     if len(locations) == 1:
         return locations[0]
 
-    if concat is not None:
-        locations = xr.concat(locations, dim=concat)
+    if dim is not None:
+        locations = concat(locations, dim=dim)
 
     return locations
 
@@ -150,6 +150,7 @@ def get_lonlat(dims):
 
 
 def get_pos(ilon, ilat, lon, lat):
+    import numpy as np
     # should be also valid for points in the range of -180 to 180
     if np.argmin([np.min(np.abs(lon - ilon)), np.min(np.abs(lon + 360. - ilon))]) == 0:
         return np.argmin(np.abs(lon - ilon)), np.argmin(np.abs(lat - ilat))
@@ -158,6 +159,7 @@ def get_pos(ilon, ilat, lon, lat):
 
 
 def rectangle(ilon, ilat, lons, lats, n=2):
+    import numpy as np
     import itertools
     ix, iy = get_pos(ilon, ilat, lons, lats)
     if ix < 2 or ix > lons.size - 2:
@@ -179,6 +181,7 @@ def bilinear_weights(x, y, p, lons, lats):
     """
     # See formula at:  http://en.wikipedia.org/wiki/Bilinear_interpolation
 
+    import numpy as np
     p = sorted(p)  # order points by x, then by y
     #
     (x1, y1), (_x1, y2), (x2, _y1), (_x2, _y2) = p
@@ -200,6 +203,7 @@ def bilinear_weights(x, y, p, lons, lats):
 
 
 def distance_weights(lons, lats, ilon, ilat):
+    import numpy as np
     ix, iy = get_pos(ilon, ilat, lons, lats)
     ny = len(lats)
     nx = len(lons)
@@ -250,6 +254,8 @@ def distance(lon, lat, lon0, lat0):
     -------
     numpy.array
     """
+
+    import numpy as np
     lonvar, latvar = np.meshgrid(lon, lat)
     rad_factor = np.pi / 180.0  # for trignometry, need angles in radians
     # Read latitude and longitude from file into numpy arrays

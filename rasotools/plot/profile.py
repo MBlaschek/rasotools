@@ -20,7 +20,7 @@ def var(data, dim='pres', ax=None, logy=False, yticklabels=None, showna=True, **
     levels = data[dim].values.copy()
     lev_units = data[dim].attrs.get('units', 'Pa')
     if lev_units == 'Pa':
-        levels /= 100.
+        levels = levels.astype(float) / 100.
         message('Converting', lev_units, 'to', 'hPa', levels, **kwargs)
         lev_units = 'hPa'
 
@@ -78,7 +78,7 @@ def winds(data, u='u', v='v', dim='pres', barbs=True, ax=None, logy=False, ytick
     levels = data[dim].values.copy()
     lev_units = data[dim].attrs.get('units', 'Pa')
     if lev_units == 'Pa':
-        levels /= 100.
+        levels = levels.astype(float) / 100.
         message('Converting', lev_units, 'to', 'hPa', levels, **kwargs)
         lev_units = 'hPa'
 
@@ -147,7 +147,7 @@ def boxplot(data, dim='pres', ax=None, vline=None, yticklabels=None, logy=False,
     levels = data[dim].values.copy()
     lev_units = data[dim].attrs.get('units', 'Pa')
     if lev_units == 'Pa':
-        levels /= 100.
+        levels = levels.astype(float) / 100.
         lev_units = 'hPa'
 
     levels = levels.astype(int)

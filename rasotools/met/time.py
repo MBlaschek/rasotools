@@ -460,18 +460,17 @@ def covariance(x, y, dim='date', period=None):
 #
 
 
-def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h', return_indices=False, only_time=False,
-                            **kwargs):
+def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h', return_indices=False, fillin=False, **kwargs):
     """ Standardize datetime to times per date, try to fill gaps
 
     Args:
         data (xarray.DataArray): Input DataArray
         dim (str): datetime dimension
         times (tuple): sounding times
-        span (int): plus minus sounding time for filling gaps
-        freq (str): frequency of sounding times
+        span (int): plus minus times (smaller than freq/2)
+        freq (str): frequency of output times
         return_indices (bool): return indices for alignment
-        only_time (bool): when multiple times can be set std times, use only time difference for selection
+        fillin (bool): use all data to fill gaps
 
     Returns:
         xarray.DataArray : datetime standardized DataArray
@@ -479,7 +478,7 @@ def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h',
     import numpy as np
     import pandas as pd
     from xarray import DataArray
-    from ..fun import message, update_kw
+    from ..fun import message, update_kw, fix_datetime, idx2shp
 
     kwargs['mname'] = kwargs.get('mname', 'std_hours')
 
@@ -491,82 +490,111 @@ def standard_sounding_times(data, dim='date', times=(0, 12), span=6, freq='12h',
 
     dates = data[dim].values.copy()
 
+    # todo: check inconsitencies between times, span and freq
+    #
     #  all possible dates
-    alldates = pd.date_range(pd.Timestamp(dates.min()).replace(hour=np.min(times), minute=0, second=0),
-                             pd.Timestamp(dates.max()).replace(hour=np.max(times), minute=0, second=0), freq=freq)
+    min_date = pd.Timestamp(dates.min()).replace(hour=np.min(times), minute=0, second=0)
+    max_date = pd.Timestamp(fix_datetime(dates.max(), span=span)).replace(hour=np.max(times), minute=0, second=0)
+    message("Dates: ", min_date, " to ", max_date, " with ", freq, **kwargs)
+    alldates = pd.date_range(min_date, max_date, freq=freq)
+
+    if span > alldates.freq.n//2:
+        raise ValueError("Frequency and Span need to be consistent (span < freq/2): ", freq, span)
 
     message("New Index:", alldates, **kwargs)
     new = data.reindex(**{dim: alldates})  # complete reindex to new dates (implicit copy)
     new['delay'] = (dim, np.zeros(alldates.size))  # new coordinate for delays
-    # matching dates
-    new_logic = np.isin(new[dim].values, dates)
-    # not found directly
-    jtx = np.where(~new_logic)[0]  # newdates not fitting dates (indices)
-    new['delay'].values[jtx] = np.nan  # not fitting dates
-    message("Indices:", new_logic.sum(), "Candiates:", (~new_logic).sum(), ">", alldates.size, **kwargs)
-    newindex = [slice(None)] * data.ndim
-    oldindex = [slice(None)] * data.ndim
+    #
+    # matching dates (new in old)
+    #
+    old_logic = np.isin(dates, new[dim].values)
+    #
+    # old dates not matched to new ones
+    #
+    jtx = np.where(~old_logic)[0]
+    new['delay'].values[~np.isin(new[dim].values, dates)] = np.nan
+    message("Indices:", old_logic.sum(), "Candiates:", (~old_logic).sum(), old_logic.size, ">", alldates.size, **kwargs)
     axis = data.dims.index(dim)
     nn = 0
     indices = []
-    # All times not yet filled
-    # Is there some data that fits within the given time window
-    for itime in new[dim].values[jtx]:
-        diff = (itime - dates) / np.timedelta64(1, 'h')  # closest sounding
-        n = np.sum(np.abs(diff) <= span)  # number of soundings within time window
-        if n > 0:
-            i = np.where(alldates == itime)[0]  # index for new array
-            if n > 1 and not only_time:
-                # many choices, count data
-                k = np.where(np.abs(diff) <= span)[0]
-                oldindex[axis] = k
-                # count data of candidates
-                # weight by time difference (assuming, that a sounding at the edge of the window is less accurate)
-                distance = np.abs(diff[k])
-                counts = np.sum(np.isfinite(data.values[tuple(oldindex)]), axis=1) / np.where(distance != 0, distance,
-                                                                                              1)
-                if np.any(counts > 0):
-                    j = k[np.argmax(counts)]  # use the one with max data / min time diff
-                    message(itime, " < ", dates[j], -1 * diff[j], n, counts, **update_kw('level', 2, **kwargs))
-                else:
-                    message(itime, "NaN", **update_kw('level', 2, **kwargs))
-                    continue
-
+    if jtx.sum() > 0:
+        _fix_datetime = np.vectorize(fix_datetime)
+        #
+        # Is there some data that fits within the given time window to new dates?
+        #
+        for m, i in enumerate(jtx):
+            #
+            # make standard date ->
+            #
+            idate = _fix_datetime(dates[i], span=span)
+            j = np.where(alldates == idate)[0]
+            if len(j) == 0:
+                continue
+            #
+            # Indices of old and new arrays
+            #
+            newindex = idx2shp(j[0], axis, new.values.shape)
+            oldindex = idx2shp(i, axis, new.values.shape)
+            status = False
+            #
+            # Fill in whenever missing values
+            #
+            if fillin:
+                new.values[newindex] = np.where(
+                    (~np.isfinite(new.values[newindex]) & np.isfinite(data.values[oldindex])),
+                    data.values[oldindex],
+                    new.values[newindex])
+                status = True
+            #
+            # when all are missing (whole profile)
+            #
+            elif np.isfinite(new.values[newindex]).sum() == 0:
+                new.values[newindex] = data.values[oldindex]
+                status = True
             else:
-                j = np.argmin(np.abs(diff))  # only one choice
+                pass
 
-            newindex[axis] = i
-            oldindex[axis] = j
-            counts = np.sum(np.isfinite(data.values[tuple(oldindex)]), axis=0)
-            if counts > 0:
-                new.values[tuple(newindex)] = data.values[tuple(oldindex)]  # update data array
-                new['delay'].values[i] = -1 * diff[j]  # pd.Timestamp(dates[j]).hour  # datetime of minimum
-                message(itime, " < ", dates[j], -1 * diff[j], n,
-                        np.sum(np.isfinite(data.values[tuple(oldindex)]), axis=0),
+            #
+            # keep original sounding times
+            #
+            if status:
+                diff = (dates[i] - idate) / np.timedelta64(1, 'h')
+                new['delay'].values[j] = -1 * diff  # pd.Timestamp(dates[j]).hour  # datetime of minimum
+                message(m, dates[i], " + ", -1 * diff, " > ", idate, np.sum(np.isfinite(data.values[oldindex]), axis=0),
                         **update_kw('level', 1, **kwargs))
-                indices += [(i[0], j)]
-                nn += 1
 
+                indices += [(i, j[0])]
+                nn += 1
+            else:
+                message(m, dates[i], " Passed ", idate, np.sum(np.isfinite(new.values[newindex]), axis=0),
+                        np.sum(np.isfinite(data.values[oldindex]), axis=0),
+                        **update_kw('level', 1, **kwargs))
+    #
+    # Add delay coordinate
+    #
+    message('Updated: ', nn, " of ", jtx.size, **kwargs)
     new.attrs['std_times'] = str(times)
     new['delay'].attrs['updated'] = nn
     new['delay'].attrs['missing'] = new['delay'].isnull().sum().values
     new['delay'].attrs['times'] = str(times)
+    #
+    # return indices for multi array alignment (datasets)
+    #
     if return_indices:
         return new, np.array(indices)
     return new
 
 
 def sel_hours(data, dim='date', times=(0, 12), **kwargs):
-    """ Select hours
+    """ Select only given hours
 
     Args:
-        data (DataArray):
-        dim (str):
-        times (tuple, list):
-        **kwargs:
+        data (xarray.DataArray): Input DataArray
+        dim (str): datetime dimension
+        times (tuple, list): hours to consider
 
     Returns:
-        DataArray
+        xarray.DataArray : DataArray only at selected hours
     """
     from ..fun import message
     from xarray import DataArray
@@ -577,24 +605,23 @@ def sel_hours(data, dim='date', times=(0, 12), **kwargs):
     if dim not in data.dims:
         raise ValueError('Requires a datetime dimension', dim)
 
-    kwargs['mname'] = kwargs.get('mname', 'sel_hours')
-    message('Selecting times:', times, data.shape, **kwargs)
+    message('Selecting times:', times, dim, data.shape, **kwargs)
     return data.sel(**{dim: data[dim].dt.hour.isin(times)}).copy()  # selection
 
 
-def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False, **kwargs):
+def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False, hour='hour', **kwargs):
     """ Split Array into separate Arrays by time
 
     Args:
         data (xarray.DataArray): Input data
         dim (str): datetime dimension
         standardize (bool): apply standardization process or select only
-        times (list): std hours
-        as_dataset (bool): return hour as variables
-        **kwargs:
+        times (tuple, list): std hours
+        as_dataset (bool): return hour dim as variables
+        hour (str): name of hour dimension
 
     Returns:
-
+        xarray.DataArray : datetime dimension split to days and hours
     """
     from ..fun import message, array2dataset, update_kw
     from pandas import Index
@@ -617,19 +644,23 @@ def to_hours(data, dim='date', standardize=True, times=(0, 12), as_dataset=False
 
     data = dict(data.groupby(dim + '.hour'))
     for ikey in data.keys():
-        idata = data.pop(ikey)
+        idata = data.get(ikey).copy()
         message(idata.name, ikey, idata.shape, **kwargs)
+        #
         # transform datetime to daily freqency
+        #
         idata[dim].values = idata[dim].to_index().to_period('D').to_timestamp().values
         data[ikey] = idata
 
-    data = concat(data.values(), dim=Index(data.keys(), name='hours'))
+    data = concat(data.values(), dim=Index(data.keys(), name=hour))
+    # make sure the shape is as promissed:
+    data = data.reindex({hour: list(times)})
     if as_dataset:
-        return array2dataset(data, 'hours', rename={i: 't%02d' % i for i in times})
+        return array2dataset(data, hour, rename={i: 't%02d' % i for i in times})
     return data
 
 
-def from_hours(data, dim='date', hour='hours', **kwargs):
+def from_hours(data, dim='date', hour='hour', **kwargs):
     """ Combine separate times to one datetime axis
 
     Args:
@@ -675,8 +706,7 @@ def day_night_departures(data, dim='date', standardize=True, **kwargs):
     Returns:
 
     """
-    from ..fun import message
-    from xarray import DataArray, set_options
+    from xarray import DataArray
 
     kwargs['mname'] = kwargs.get('mname', 'dn_dep')
 

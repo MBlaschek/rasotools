@@ -3,7 +3,7 @@
 __all__ = ['dataset_to_hours']
 
 
-def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suffix='', interpolate=False, levels=None,
+def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', hour='hour', suffix='', interpolate=False, levels=None,
                      **kwargs):
     """ convert all DataArrays in the Dataset to hours
 
@@ -28,7 +28,7 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
     data = data.copy()
     new = Dataset()
     if std is not None:
-        new[std + suffix], idx = standard_sounding_times(data[std], return_indices=True,
+        new[std + suffix], idx = standard_sounding_times(data[std], return_indices=True, dim=dim,
                                                          **update_kw('level', 1, **kwargs))
         message("Standard: ", std, new[std + suffix].shape, **kwargs)
 
@@ -39,19 +39,19 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
         if variables is not None and i not in variables:
             continue
 
-        if interpolate and 'pres' in data[i].dims:
+        if interpolate and lev in data[i].dims:
             tmp = vertical_interpolation(data[i], lev, levels=levels, **update_kw('level', 1, **kwargs))
-            new[i + suffix] = sel_hours(tmp)
+            new[i + suffix] = sel_hours(tmp, dim=dim, **update_kw('level', 1, **kwargs))
         else:
-            new[i + suffix] = sel_hours(data[i])
+            new[i + suffix] = sel_hours(data[i], dim=dim, **update_kw('level', 1, **kwargs))
 
         if std is not None and idx.size > 0:
             # if dim in dims
             if dim in data[i].dims:
                 inew = [slice(None)] * new[i + suffix].ndim
                 iold = [slice(None)] * data[i].ndim
-                inew[new[i + suffix].dims.index(dim)] = idx[:, 0]
-                iold[data[i].dims.index(dim)] = idx[:, 1]
+                inew[new[i + suffix].dims.index(dim)] = idx[:, 1]
+                iold[data[i].dims.index(dim)] = idx[:, 0]
                 new[i + suffix].values[tuple(inew)] = data[i].values[tuple(iold)]  # copy same
 
         message("Converted:", i + suffix, **kwargs)
@@ -62,7 +62,7 @@ def dataset_to_hours(data, std=None, variables=None, dim='date', lev='pres', suf
         idata[dim].values = idata[dim].to_index().to_period('D').to_timestamp().values
         data[ikey] = idata
 
-    data = concat(data.values(), dim=Index(data.keys(), name='hours'))
+    data = concat(data.values(), dim=Index(data.keys(), name=hour))
     if 'delay' in data.coords:
         data = data.reset_coords('delay').rename({'delay': 'delay' + suffix})
 

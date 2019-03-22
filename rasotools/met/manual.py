@@ -45,16 +45,17 @@ def remove_spurious_values(dates, data, axis=0, num_years=10, value=30, bins=Non
         # 10 year running statistics
         jtx[axis] = np.where((years <= iyear) & (years >= (iyear - num_years)), True, False)
         # Apply over date dimension, for all other
-        new = np.apply_along_axis(_myhistogram, axis, data[jtx], value=value, bins=bins, **message_level(kwargs))
-        data[jtx] = np.where(new, np.nan, data[jtx])  # Set nan or leave it
-        mask[jtx] = new
-        message("%d %d [%d]" % (iyear, np.sum(np.isfinite(data[jtx])), np.sum(new)), **kwargs)
+        new = np.apply_along_axis(_myhistogram, axis, data[tuple(jtx)], value=value, bins=bins, **kwargs)
+        data[tuple(jtx)] = np.where(new, np.nan, data[tuple(jtx)])  # Set nan or leave it
+        mask[tuple(jtx)] = new
+        if np.sum(new) > 0:
+            message("%d %d [%d]" % (iyear, np.sum(np.isfinite(data[tuple(jtx)])), np.sum(new)), **kwargs)
         count += np.sum(new)
 
     return data, count, mask
 
 
-def _myhistogram(data, value=30, bins=10, normed=True, excess=5, thres=1, **kwargs):
+def _myhistogram(data, value=30, bins=10, excess=5, thres=1, **kwargs):
     """ Customized histogram
 
     Args:
@@ -67,14 +68,14 @@ def _myhistogram(data, value=30, bins=10, normed=True, excess=5, thres=1, **kwar
         ndarray : boolean mask
     """
     itx = np.isfinite(data)  # remove missing
-    counts, divs = np.histogram(data[itx], bins=bins, normed=normed)
+    counts, divs = np.histogram(data[itx], bins=bins, density=True)
 
     n = len(divs) + 1
     if np.sum(itx) < n * 2:
         return np.full(data.shape, False)  # not enough data
 
     # mark values with anomalous high distribution! add 10% or 5%
-    jtx = np.argmax(np.histogram(value, bins=bins, normed=normed)[0])  # box of value in the current histogram
+    jtx = np.argmax(np.histogram(value, bins=bins, density=True)[0])  # box of value in the current histogram
     crit = (excess / 100.) * (n / 100.)  # 5%  depends on sample size
 
     # Value is above critical

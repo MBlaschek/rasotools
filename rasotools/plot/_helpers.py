@@ -100,7 +100,8 @@ def line(dates, values, title='', ylabel='', xlabel='', xerr=None, yerr=None, fi
                 label=kwargs.get('label', None),
                 marker=kwargs.get('marker', None),
                 alpha=kwargs.get('alpha', 1),
-                color=kwargs.get('color', None))  # Line Plot
+                color=kwargs.get('color', None),
+                zorder=kwargs.get('zorder', 1))  # Line Plot
     elif filled:
         ax.plot(dates, values,
                 ls=kwargs.get('ls', '-'),
@@ -129,7 +130,8 @@ def line(dates, values, title='', ylabel='', xlabel='', xerr=None, yerr=None, fi
                     label=kwargs.get('label', None),
                     marker=kwargs.get('marker', None),
                     alpha=kwargs.get('alpha', 1),
-                    color=kwargs.get('color', None))  # Line Plot
+                    color=kwargs.get('color', None),
+                    zorder=kwargs.get('zorder', 1))  # Line Plot
 
     ax.grid('gray', ls='--')
     ax.set_title(title)

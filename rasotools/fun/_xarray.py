@@ -54,3 +54,8 @@ def set_attrs(data, name, set='', add='', default=''):
     else:
         data.attrs[name] += add
 
+
+def idx2shp(idx, axis, shape):
+    index = [slice(None)] * len(shape)
+    index[axis] = idx
+    return tuple(index)

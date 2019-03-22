@@ -44,8 +44,17 @@ def temperature(data, dim='pres', return_logic=False, **kwargs):
         pin = rt.Pressure.values * 100.  # hPa to Pa
 
     tmins = np.interp(np.log(pressure), np.log(pin), tmin, left=tmin.min(), right=tmin.max())
+    # for i, idim in enumerate(data.dims):
+    #     if idim == dim:
+    #         continue
+    #     tmins = np.expand_dims(tmins, axis=i)
+
     tmins = np.broadcast_to(tmins, data.values.shape)
     tmaxs = np.interp(np.log(pressure), np.log(pin), tmax, left=tmax.min(), right=tmax.max())
+    # for i, idim in enumerate(data.dims):
+    #     if idim == dim:
+    #         continue
+    #     tmaxs = np.expand_dims(tmaxs, axis=i)
     tmaxs = np.broadcast_to(tmaxs, data.values.shape)
     with np.errstate(invalid='ignore'):
         logic = (data.values < tmins) | (data.values > tmaxs)

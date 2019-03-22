@@ -500,3 +500,27 @@ def spearman_correlation(x, y, axis=0):
     x_ranks = bn.nanrankdata(x, axis=axis)
     y_ranks = bn.nanrankdata(y, axis=axis)
     return pearson_correlation(x_ranks, y_ranks, axis=axis)
+
+
+def fix_datetime(itime, span=6):
+    """ Fix datetime to standard datetime with hour precision
+
+    Args:
+        itime (datetime): Datetime
+        span (int): allowed difference to standard datetime (0,6,12,18)
+
+    Returns:
+        datetime : standard datetime
+    """
+    import pandas as pd
+    itime = pd.Timestamp(itime)
+    for ihour in range(0, 24, span * 2):
+        lower = (ihour - span + 24) % 24
+        upper = (ihour + span + 24) % 24
+        if itime.hour >= lower or itime.hour < upper:
+            rx = itime.replace(hour=ihour, minute=0, second=0, microsecond=0)
+            if itime.hour >= (24 - span):
+                rx = rx + pd.DateOffset(days=1)
+            return rx.to_datetime64()
+        else:
+            pass

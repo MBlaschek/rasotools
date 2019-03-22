@@ -64,14 +64,14 @@ class Bunch(object):
 
 
 class Radiosonde(object):
-    def __init__(self, ident, data=None, **kwargs):
+    def __init__(self, ident, data=None, directory=None, **kwargs):
         self.ident = ident
         if data is not None:
             self.data = Bunch(**data)
         else:
             self.data = Bunch()  # empty
         self.attrs = Bunch(**kwargs)
-        self.directory = None
+        self.directory = directory
 
     def __repr__(self):
         summary = u"Radiosonde (%s)\n" % self.ident
@@ -99,13 +99,15 @@ class Radiosonde(object):
         if key in self.data:
             delattr(self.data, key)
 
-    def add(self, name, filename=None, directory=None, xwargs={}, **kwargs):
+    def add(self, name, filename=None, directory=None, rename={}, cfunits=False, xwargs={}, **kwargs):
         """ Add data to radiosonde class object [container]
 
         Args:
             name (str): used as filename and/or as data name
             filename (str): filename to read from (netcdf)
             directory (str): directory of radiosonde store, default config rasodir
+            rename (dict): rename variables
+            cfunits (bool): apply cfunits
             xwargs (dict): xarray open_dataset keywords
         """
         from . import config
@@ -151,6 +153,16 @@ class Radiosonde(object):
             message("Reading ...", filename, **kwargs)
             self.data[name] = xr.open_dataset(filename, **xwargs)
 
+        self.data[name] = self.data[name].rename(rename)
+
+        if cfunits:
+            import cf2cdm
+            for i, j in self.data[name].coords.items():
+                if str(j.dtype) == 'datetime64[ns]':
+                    if 'standard_name' in j.attrs:
+                        del j.attrs['standard_name']
+            self.data[name] = cf2cdm.translate_coords(self.data[name], cf2cdm.CDS)
+
         # merge dictionaries and append common
         self.attrs.__dict__ = dict_add(vars(self.attrs), dict(self.data[name].attrs))
         if 'ident' in self.attrs:
@@ -171,9 +183,9 @@ class Radiosonde(object):
             if idata not in exclude:
                 if hasattr(self.data[idata], 'close'):
                     self.data[idata].close()  # for xarray netcdf open files
-                    message(idata, 'closed', **kwargs)
+                    message(idata, 'closed', **update_kw('mname', self.ident, **kwargs))
                 del self.data[idata]
-                message(idata, **kwargs)
+                message(idata, **update_kw('mname', self.ident, **kwargs))
 
         for iatt in list(self.attrs):
             if iatt not in exclude:
@@ -183,18 +195,6 @@ class Radiosonde(object):
         if old_name in self.data:
             self.data.__dict__[new_name] = self.data.__dict__.pop(old_name)
             message(old_name, " > ", new_name, **kwargs)
-
-    def get_info(self, add_attrs=False, **kwargs):
-        from fun.lists import combined
-        sondes = combined(**update_kw('minimal', False, **kwargs))
-        if self.ident in sondes.index:
-            infos = sondes.xs(self.ident).to_dict()
-            message(Bunch(**infos), **kwargs)
-            if add_attrs:
-                self.attrs.__dict__.update(infos)
-                message("Attributes added", **update_kw('verbose', 1, **kwargs))
-        else:
-            message("No information found: %s" % self.ident, **kwargs)
 
     def list_store(self, directory=None, varinfo=False, ncinfo=False):
         import time
@@ -284,6 +284,10 @@ class Radiosonde(object):
                 iobj = getattr(self.data, iname)
                 if len(iobj.attrs) or add_global:
                     iobj.attrs.update(attrs)  # add global attributes
+
+                for i in list(iobj.attrs.keys()):
+                    if iobj.attrs[i] is None:
+                        del iobj.attrs[i]
 
                 if force:
                     xwargs.update({'mode': 'w'})

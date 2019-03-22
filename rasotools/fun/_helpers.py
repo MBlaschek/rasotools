@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'check_kw', 'update_kw', 'suche123', 'dict_add']
+__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'check_kw', 'update_kw', 'suche123', 'dict_add',
+           'dict_in_dict']
 
 
 def now():
@@ -142,3 +143,14 @@ def list_in_list(jlist, ilist):
         else:
             pass
     return out
+
+
+def dict_in_dict(a, b, method='difference'):
+    if method == 'difference':
+        return {k: v for k, v in set(a.items()) - set(b.items())}
+    elif method == 'union':
+        return {k: v for k, v in set(a.items()).union(set(b.items()))}
+    elif method == 'intersection':
+        return {k: v for k, v in set(a.items()).intersection(set(b.items()))}
+    else:
+        return {}

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ['to_rh']
+__all__ = ['to_rh', 'to_vp', 'to_dpd', 'to_sh', 'to_dewpoint']
 
 
 def to_rh(temp, dpd=None, spec_humi=None, press=None, method='HylandWexler', **kwargs):
@@ -60,11 +60,11 @@ def to_rh(temp, dpd=None, spec_humi=None, press=None, method='HylandWexler', **k
         # DPD to RH
         vpdata = svp(temp.values - dpd.values, method=method, p=press)
         rvar.values = vpdata / svp(temp.values, method=method, p=press)
-        origin = 'DPD'
+        origin = 't,dpd' if press is None else 't,dpd,p'
     else:
         vpdata = sh2vap(spec_humi.values, press)
         rvar.values = vpdata / svp(temp.values, method=method, p=press)
-        origin = 'Q'
+        origin = 't,q,p'
 
     r_att = {'units': '1', 'standard_name': 'relativ_humidity', 'esat': method, 'origin': origin}
     if 'p' in kwargs.keys():
@@ -134,12 +134,12 @@ def to_vp(temp, dpd=None, rel_humi=None, spec_humi=None, press=None, method='Hyl
     if dpd is not None:
         # DPD to VP
         vpvar.values = svp(temp - dpd, method=method, **kwargs)
-        origin = 'DPD'
+        origin = 't,dpd'
 
     elif rel_humi is not None:
         # RH to VP
         vpvar.values = svp(temp, method=method, **kwargs) * rel_humi
-        origin = 'R'
+        origin = 't,rh'
 
     else:
         if press is None:
@@ -153,7 +153,7 @@ def to_vp(temp, dpd=None, rel_humi=None, spec_humi=None, press=None, method='Hyl
             pass
         # Q to VP
         vpvar.values = sh2vap(spec_humi, press)
-        origin = 'Q'
+        origin = 'q'
 
     attrs.update({'origin': origin, 'esat': method})
     attrs.update(kwargs)
@@ -165,7 +165,8 @@ def to_vp(temp, dpd=None, rel_humi=None, spec_humi=None, press=None, method='Hyl
     return vpvar
 
 
-def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, method='HylandWexler', **kwargs):
+def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, svp_method='HylandWexler',
+           dewp_method='dewpoint_Boegel', **kwargs):
     """ Convert relative humidity, specific humidity or water vapor pressure to dewpoint departure
 
     1. RH to DPD (T):
@@ -235,26 +236,26 @@ def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, method='Hyl
         # if 'ECMWF' in method:
         #     dpdvar.values = temp.values - dewpoint_ecmwf(temp.values, rel_humi.values)
         # else:
-        vpdata = rel_humi.values * svp(temp.values, method=method, **kwargs)
-        dpdvar.values = temp.values - dewpoint(vpdata, method=method, **kwargs)
-        origin = 'R'
+        vpdata = rel_humi.values * svp(temp.values, method=svp_method, **kwargs)
+        dpdvar.values = temp.values - dewpoint(vpdata, method=dewp_method, **kwargs)
+        origin = 't,rh'
     elif vp is not None:
         # VP to DPD
         # if method.lower() == 'ecmwf':
         #     dpdvar.values = temp.values - vp2td(vp.values)
         # else:
-        dpdvar.values = temp.values - dewpoint(vp.values, method=method, **kwargs)
-        origin = 'VP'
+        dpdvar.values = temp.values - dewpoint(vp.values, method=dewp_method, **kwargs)
+        origin = 't,vp'
     else:
         # Q to DPD
         # if method.lower() == 'ecmwf':
         #     dpdvar.values = temp.values - rh2td(temp.values, q2rh(spec_humi.values, temp.values, press.values))
         # else:
         vpdata = sh2vap(spec_humi.values, press.values)
-        dpdvar.values = temp.values - dewpoint(vpdata, method=method, **kwargs)
-        origin = 'Q'
+        dpdvar.values = temp.values - dewpoint(vpdata, method=dewp_method, **kwargs)
+        origin = 't,q,p'
 
-    attrs.update({'origin': origin, 'esat': method})
+    attrs.update({'origin': origin, 'svp': svp_method, 'dewp': dewp_method})
     attrs.update(kwargs)
     if 'p' in kwargs.keys():
         kwargs['p'] = 'enhancement_factor'
@@ -330,17 +331,17 @@ def to_sh(vp=None, temp=None, rel_humi=None, dpd=None, press=None, method='Hylan
     if rel_humi is not None:
         # VP to Q
         qvar.values = vap2sh(vp.values, press)
-        origin = 'VP'
+        origin = 'vp,p'
     elif vp is not None:
         # RH to Q
         vpdata = rel_humi.values * svp(temp.values, method=method, **kwargs)
         qvar.values = vap2sh(vpdata, press)
-        origin = 'R'
+        origin = 't,rh,p'
     else:
         # DPD to Q
         vpdata = svp(temp.values - dpd.values, method=method, **kwargs)
         qvar.values = vap2sh(vpdata, press)
-        origin = 'DPD'
+        origin = 't,dpd,p'
 
     attrs.update({'origin': origin, 'esat': method})
     attrs.update(kwargs)
@@ -352,7 +353,8 @@ def to_sh(vp=None, temp=None, rel_humi=None, dpd=None, press=None, method='Hylan
     return qvar
 
 
-def to_dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, method='HylandWexler', **kwargs):
+def to_dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, svp_method='HylandWexler',
+                dewp_method='dewpoint_Boegel', **kwargs):
     """ calculate dewpoint
     VP -> Td
     T, RH (p= -> vp -> Td
@@ -416,17 +418,17 @@ def to_dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, m
             kwargs['p'] = press
 
     if vp is not None:
-        dewp.values = dewpoint(vp.values, method=method, **kwargs)
-        origin = 'VP'
+        dewp.values = dewpoint(vp.values, method=dewp_method, **kwargs)
+        origin = 'vp'
     elif temp is not None:
-        vp = rel_humi.values * svp(temp.values, method=method, **kwargs)
-        dewp.values = dewpoint(vp, method=method, **kwargs)
-        origin = 'R'
+        vp = rel_humi.values * svp(temp.values, method=svp_method, **kwargs)
+        dewp.values = dewpoint(vp, method=dewp_method, **kwargs)
+        origin = 't,rh'
     else:
         dewp.values = sh2vap(spec_humi.values, press)
-        origin = 'S'
+        origin = 'q,p'
 
-    attrs.update({'origin': origin, 'esat': method})
+    attrs.update({'origin': origin, 'svp': svp_method, 'dewp': dewp_method})
     attrs.update(kwargs)
     if 'p' in kwargs.keys():
         kwargs['p'] = 'enhancement_factor'
@@ -598,7 +600,10 @@ def vertical_interpolation(data, dim, levels=None, **kwargs):
     axis = data.dims.index(dim)
     pin = data[dim].values
     values = np.apply_along_axis(profile, axis, data.values, pin, levels)
-    data = data.reindex({dim: levels})
+    data = data[np.isfinite(data[dim].values)]
+    _, indices = np.unique(data[dim].values, return_index=True)
+    data = data.isel({dim: indices})
+    data = data.reindex({dim: levels})  # can fail with duplicated values
     data.values = values
     cmethod = "%s: intp(%d > %d)" % (dim, len(pin), len(levels))
     if 'cell_method' in data.attrs:
@@ -608,7 +613,7 @@ def vertical_interpolation(data, dim, levels=None, **kwargs):
     return data
 
 
-def adjust_dpd30(data, num_years=10, datedim='date', subset=slice(None, '1994'), value=30, bins=None, thres=1,
+def adjust_dpd30(data, num_years=10, dim='date', subset=slice(None, '1994'), value=30, bins=None, thres=1,
                  return_mask=False,
                  **kwargs):
     """ Specifc Function to remove a certain value from the Histogram (DPD)
@@ -633,19 +638,17 @@ def adjust_dpd30(data, num_years=10, datedim='date', subset=slice(None, '1994'),
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
 
-    if datedim not in data.dims:
+    if dim not in data.dims:
         raise ValueError("DataArray class has no datetime dimension")
 
     if bins is None:
         bins = np.arange(0, 60)
         message("Using default bins [0, 60]", **kwargs)
 
-    axis = data.dims.index(datedim)
-    dates = data[datedim].values.copy()
-    itx = [slice(None)] * len(data.dims)
-    itx[axis] = subset
+    axis = data.dims.index(dim)
+    dates = data[dim].sel({dim:subset}).values.copy()
     message("Using Subset %s" % str(subset), **kwargs)
-    values = data.loc[itx].values
+    values = data.sel({dim: subset}).values.copy()
 
     if np.sum(np.isfinite(values)) == 0:
         return data
@@ -660,13 +663,13 @@ def adjust_dpd30(data, num_years=10, datedim='date', subset=slice(None, '1994'),
 
     values, count, mask = remove_spurious_values(dates, values, axis=axis, num_years=num_years, value=value, bins=bins,
                                                  thres=thres, **kwargs)
-    data.loc[itx] = values  # Assign new values
+    data.loc[{dim : subset}] = values  # Assign new values
     data.attrs['DPD%d' % int(value)] = count
 
     if return_mask:
         dmask = data.copy()
-        dmask.loc[::] = False  # Everything false
-        dmask.loc = mask
+        dmask.values = False  # Everything false
+        dmask.values = mask
         dmask.name += '_mask'
         dmask.attrs['units'] = '1'
         dmask.attrs['standard_name'] += '_mask'

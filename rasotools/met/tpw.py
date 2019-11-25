@@ -11,14 +11,14 @@ def tpw(values, pin, axis=0, min_levels=8, fill_nan=True):
      W = np.trapz(q, x=p) / 9.81 # kg/m2 == mm
 
     Args:
-        values      (array):    Specific Humidity [kg/kg]
-        pin         (array):    Pressure [Pa]
+        values      (numpy.ndarray):    Specific Humidity [kg/kg]
+        pin         (numpy.ndarray):    Pressure [Pa]
         axis        (int):      Axis for vertical integration
         min_levels  (int):      minimum required levels for valid integration (exclusive with levels)
         fill_nan    (bool):     convert missing numbers to 0
 
     Returns:
-        array : integrated TPW (vertical coordinate removed)
+        numpy.ndarray : integrated TPW (vertical coordinate removed)
 
     Notes:
         Both Methods work fine

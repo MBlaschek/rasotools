@@ -1,26 +1,30 @@
 # -*- coding: utf-8 -*-
+import numpy as np
+from xarray import DataArray, Dataset
+import matplotlib.pyplot as plt
+
+__all__ = ['threshold', 'summary', 'var', 'breakpoints', 'snht']
 
 
-def threshold(data, dim='date', lev=None, thres=50, colorlevels=None, legend=True, logy=False,
+def threshold(data, dim='time', lev=None, thres=50, colorlevels=None, legend=True, logy=False,
               yticklabels=None, ax=None, **kwargs):
     """
 
     Args:
-        data:
-        dim:
-        lev:
-        thres:
-        colorlevels:
-        legend:
-        logy:
-        yticklabels:
-        ax:
+        data (DataArray):
+        dim (str):
+        lev (str):
+        thres (int):
+        colorlevels (list):
+        legend (bool):
+        logy (bool):
+        yticklabels (list):
+        ax (plt.axes):
         **kwargs:
 
     Returns:
-
+        plt.axes
     """
-    from xarray import DataArray
     from ._helpers import line, contour, set_labels, get_info, plot_levels as pl, plot_arange as pa
 
     if not isinstance(data, DataArray):
@@ -51,21 +55,19 @@ def threshold(data, dim='date', lev=None, thres=50, colorlevels=None, legend=Tru
                        yticklabels=yticklabels, legend=legend, **kwargs)
 
 
-def summary(data, dim='date', thres=None, ax=None, **kwargs):
+def summary(data, dim='time', thres=None, ax=None, **kwargs):
     """
 
     Args:
-        data:
-        dim:
-        thres:
-        ax:
+        data (DataArray):
+        dim (str):
+        thres (int):
+        ax (axis):
         **kwargs:
 
     Returns:
 
     """
-    import numpy as np
-    from xarray import DataArray
     from ._helpers import line, set_labels, get_info
 
     if not isinstance(data, DataArray):
@@ -95,26 +97,25 @@ def summary(data, dim='date', thres=None, ax=None, **kwargs):
     return ax
 
 
-def var(data, dim='date', lev=None, colorlevels=None, logy=False, yticklabels=None, legend=True,
+def var(data, dim='time', lev=None, colorlevels=None, logy=False, yticklabels=None, legend=True,
         ax=None, **kwargs):
     """
 
     Args:
-        data:
-        dim:
-        lev:
-        colorlevels:
-        logy:
-        yticklabels:
-        legend:
-        ax:
+        data (DataArray):
+        dim (str):
+        lev (str):
+        colorlevels (list):
+        logy (bool):
+        yticklabels (list):
+        legend (bool):
+        ax (axis):
         **kwargs:
 
     Returns:
 
     """
-    from xarray import DataArray
-    from ._helpers import line, contour, get_info, set_labels,plot_levels as pl, plot_arange as pa
+    from ._helpers import line, contour, get_info, set_labels, plot_levels as pl, plot_arange as pa
 
     if not isinstance(data, DataArray):
         raise ValueError('Requires a DataArray', type(data))
@@ -127,7 +128,7 @@ def var(data, dim='date', lev=None, colorlevels=None, logy=False, yticklabels=No
 
     if colorlevels is not None:
         if isinstance(colorlevels, str):
-            colorlevels = eval(colorlevels)
+            colorlevels = eval(colorlevels)   # plot_levels, plot_arange
 
     if lev is None:
         set_labels(kwargs, xlabel=get_info(data[dim]), title=get_info(data), ylabel=get_info(data))
@@ -144,11 +145,11 @@ def var(data, dim='date', lev=None, colorlevels=None, logy=False, yticklabels=No
                        yticklabels=yticklabels, legend=legend, **kwargs)
 
 
-def breakpoints(data, dim='date', thres=2, startend=False, borders=None, filled=False, ax=None, **kwargs):
+def breakpoints(data, dim='time', thres=2, startend=False, borders=None, filled=False, ax=None, **kwargs):
     """
 
     Args:
-        data (DataArray): Breakpoint data
+        data (DataArray): Breakpoint dataset
         dim (str): datetime dimension
         thres (int, float): threshold to id breaks
         startend (bool): start end thresholds
@@ -159,9 +160,6 @@ def breakpoints(data, dim='date', thres=2, startend=False, borders=None, filled=
     Returns:
         Axes
     """
-    import numpy as np
-    from xarray import DataArray
-    import matplotlib.pyplot as plt
     from ..bp import get_breakpoints
 
     if not isinstance(data, DataArray):
@@ -171,20 +169,10 @@ def breakpoints(data, dim='date', thres=2, startend=False, borders=None, filled=
         raise ValueError('Requires a datetime dimension', dim)
 
     dates = data[dim].values
-    indices = get_breakpoints(data, thres, dim=dim)
-    e = []
-    s = []
-    axis = data.dims.index(dim)
-    if data.ndim > 1:
-        summe = data.values.sum(axis=1 if axis == 0 else 0)
+    if startend:
+        indices, e, s = get_breakpoints(data, thres, dim=dim, return_startstop=startend)
     else:
-        summe = data.values
-
-    for k in indices:
-        l = np.where(summe[:k][::-1] == 0)[0][0]
-        m = np.where(summe[k:] == 0)[0][0]
-        e += [k - l]
-        s += [k + m]
+        indices = get_breakpoints(data, thres, dim=dim)
 
     if ax is None:
         f, ax = plt.subplots()  # 1D SNHT PLOT
@@ -213,3 +201,41 @@ def breakpoints(data, dim='date', thres=2, startend=False, borders=None, filled=
         j += 1
 
     return ax
+
+
+def snht(data, snht_var, break_var, dim='time', lev='plev', thres=50, **kwargs):
+    """ Plot SNHT summary
+
+    Args:
+        data (Dataset):
+        snht_var (str):
+        break_var (str):
+        dim (str):
+        lev (str):
+        thres (int):
+        **kwargs:
+
+    Returns:
+        plt.figure, plt.axes : Figure and Axes
+    """
+    from . import init_fig_vertical
+    f, ax = init_fig_vertical(**kwargs)
+    _, cs = threshold(data[snht_var], dim=dim, lev=lev, ax=ax[1], logy=False, legend=False, **kwargs)
+    ax[1].set_title('')
+    if break_var is not None:
+        breakpoints(data[break_var], ax=ax[1], color='k', dim=dim)
+    summary(data[snht_var], dim=dim, thres=thres, ax=ax[0], xlabel='', ylabel='Sum SNHT', **kwargs)
+    if break_var is not None:
+        breakpoints(data[break_var], ax=ax[0], color='k', dim=dim)
+    f.get_axes()[2].set_ylabel('Sum sign. Levs')
+    f.subplots_adjust(right=0.9)
+    cax = f.add_axes([0.91, 0.15, 0.015, 0.5])
+    f.colorbar(cs, cax=cax)
+    f.subplots_adjust(hspace=0.05)
+    # if upper is not None:
+    #     for i in upper:
+    #         eval('ax[0]' + i)
+    # if lower is not None:
+    #     for i in lower:
+    #         eval('ax[1]' + i)
+    return f, ax

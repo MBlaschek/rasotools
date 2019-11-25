@@ -17,16 +17,30 @@ def view(filename, show_attributes=False):
     if not os.path.isfile(filename):
         raise IOError("Unknonw file: %s" % filename)
 
-    with nc.Dataset(filename, 'r') as f:
-        # HEADER INFORMATION
-        print("File: %s" % filename)
-        _header(f)
-        # other variables ?
-        if show_attributes:
-            print()
-            _detailed_information(f)
+    if 'gz' in filename:
+        import gzip
+        with gzip.open(filename) as g:
+            with nc.Dataset("dummy", 'r', memory=g.read()) as f:
+                # HEADER INFORMATION
+                print("File: %s" % filename)
+                _header(f)
+                # other variables ?
+                if show_attributes:
+                    print()
+                    _detailed_information(f)
 
-        print()
+                print()
+    else:
+        with nc.Dataset(filename, 'r', ) as f:
+            # HEADER INFORMATION
+            print("File: %s" % filename)
+            _header(f)
+            # other variables ?
+            if show_attributes:
+                print()
+                _detailed_information(f)
+
+            print()
 
 
 def _header(f):

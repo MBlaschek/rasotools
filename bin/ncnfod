@@ -1,0 +1,101 @@
+#!/usr/bin/env python
+import sys, os
+
+
+def color_boolean(x):
+    """
+    Colorize a bool
+    Parameters
+    ----------
+    x   bool    True: Green, False: Red
+
+
+    Returns
+    -------
+    str     Colored True or False
+    """
+    if x:
+        return "\033[92m %r \033[0m" % x
+    else:
+        return "\033[91m %r \033[0m" % x
+
+
+if __name__ == '__main__':
+    # import getopt
+    import numpy as np
+    import netCDF4 as nc
+
+    # try:
+    #     opts, pargs = getopt.getopt(sys.argv[1:], 'f:d:a', ['variable=', 'dimension='])
+    # except:
+    #     (type, value, traceback) = sys.exc_info()
+    #     sys.stdout.write("Error parsing the options. The error was: %s\n" % value)
+    #     # sys.stderr.write(usage)
+    #     sys.exit(0)
+    if len(sys.argv) != 3:
+        raise RuntimeError()
+
+    ifile = sys.argv[1]
+    jfile = sys.argv[2]
+
+    if not os.path.isfile(ifile):
+        raise IOError()
+    if not os.path.isfile(jfile):
+        raise IOError()
+
+    with nc.Dataset(ifile) as f:
+        with nc.Dataset(jfile) as g:
+            # Dimensions
+            for ivar in f.variables:
+                if ivar in f.dimensions:
+                    if ivar in g.dimensions:
+                        print("       %-15s : %-8d <> %-8d  %s Size: [%s]" % (ivar,
+                                                                              f.dimensions[ivar].size,
+                                                                              g.dimensions[ivar].size,
+                                                                              '[unlimited]' if
+                                                                              f.dimensions[
+                                                                                  ivar].isunlimited() else '',
+                                                                              color_boolean(
+                                                                                  f.dimensions[
+                                                                                      ivar].size ==
+                                                                                  g.dimensions[
+                                                                                      ivar].size)))
+                        in_f = np.in1d(f.variables[ivar][:], g.variables[ivar][:])
+                        in_g = np.in1d(g.variables[ivar][:], f.variables[ivar][:])
+                        if in_f.size > 0:
+                            print("1       %-15s :" % ivar, " not in 2:", f.variables[ivar][~in_f])
+                        if in_g.size > 0:
+                            print("2       %-15s :" % ivar, " not in 1:", g.variables[ivar][~in_g])
+                    else:
+                        print("       %-15s : %-8d only in 1 %s" % (ivar,
+                                                                    f.dimensions[ivar].size,
+                                                                    '[unlimited]' if f.dimensions[
+                                                                        ivar].isunlimited() else ''))
+            allvars = []
+
+            for ivar in f.variables:
+                if ivar in f.dimensions:
+                    continue
+                allvars += [ivar]
+                if ivar in g.variables:
+                    print("1      %-25s : %-20s %-15s [%s]" % (
+                        ivar, ",".join(f.variables[ivar].dimensions), str(f.variables[ivar].shape),
+                        str(getattr(f.variables[ivar], 'units', '1'))))
+                    print("2      %-25s : %-20s %-15s [%s]" % (
+                        ivar, ",".join(g.variables[ivar].dimensions), str(g.variables[ivar].shape),
+                        str(getattr(g.variables[ivar], 'units', '1'))))
+                    if f.variables[ivar].shape == g.variables[ivar].shape:
+                        print("<>     %-25s : Shape: %s, Values: %s" % (
+                            ivar, color_boolean(True),
+                            color_boolean((f.variables[ivar][:] == g.variables[ivar][:]).all())))
+
+                    else:
+                        print("<>     %-25s : Shape: %s" % (ivar, color_boolean(False)))
+            print("1 : ", allvars)
+            allvars = []
+            for ivar in g.variables:
+                if ivar in g.dimensions:
+                    continue
+                allvars += [ivar]
+            print("2 : ", allvars)
+

@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 
 __all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'check_kw', 'update_kw', 'suche123', 'dict_add',
-           'dict_in_dict']
+           'dict_in_dict', 'list_in_list', 'levelup', 'leveldown', 'get_data', 'load_rttov']
 
 
-def now():
+def now(timespec='auto'):
     """ Datetime string
 
     Returns:
         str : datetime now
     """
     import datetime
-    return datetime.datetime.now().isoformat()
+    return datetime.datetime.now().isoformat(timespec=timespec)
 
 
 def find_files(directory, pattern, recursive=True):
@@ -90,6 +90,16 @@ def update_kw(name, value, **kwargs):
     return kwargs
 
 
+def levelup(**kwargs):
+    kwargs.update({'level': kwargs.get('level', 0) + 1})
+    return kwargs
+
+
+def leveldown(**kwargs):
+    kwargs.update({'level': kwargs.get('level', 0) - 1})
+    return kwargs
+
+
 def suche123(eins, zwei, drei, test=None):
     if eins is not test:
         return eins
@@ -124,7 +134,7 @@ def dict_add(d1, d2):
 
 
 def list_in_list(jlist, ilist):
-    """ compare lists and use wildcards
+    """ compare_lists lists and use wildcards
 
     Args:
         jlist (list): list of search patterns
@@ -154,3 +164,53 @@ def dict_in_dict(a, b, method='difference'):
         return {k: v for k, v in set(a.items()).intersection(set(b.items()))}
     else:
         return {}
+
+
+def get_data(path=None):
+    """
+    get a filename form the Module AX directory of the module
+
+    Parameters
+    ----------
+    path : str
+        filename
+
+    Returns
+    -------
+    str
+         path to the file
+    """
+    import os
+    location = os.path.dirname(__file__).replace('/fun', '/ax')
+    if path is None:
+        print("Choose one: ")
+        print("\n".join(os.listdir(os.path.abspath(location))))
+    else:
+        return os.path.join(os.path.abspath(location), path)
+
+
+def load_rttov():
+    """ Load RTTOV profile limits for quality checks
+    """
+    import os
+    import pandas as pd
+    from .. import config
+    filename = get_data('rttov_54L_limits.csv')
+    if os.path.isfile(filename):
+        data = pd.read_csv(filename)
+        names = {}
+        units = {}
+        for i in list(data.columns):
+            j = i.split('(')
+            iname = j[0].strip().replace(' ', '_')
+            iunit = j[1].replace(')', '').strip()
+            names[i] = iname
+            units[iname] = iunit
+        data = data.rename(names, axis=1)
+        data = data.set_index('Pressure')
+        data = data.to_xarray()
+        for i in list(data.data_vars):
+            data[i].attrs['units'] = units[i]
+        data['Pressure'].attrs['units'] = units['Pressure']
+
+        setattr(config, 'rttov_profile_limits', data)

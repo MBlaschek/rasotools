@@ -177,6 +177,10 @@ def contour(ax, dates, plevs, test, logy=False, colorlevels=None, yticklabels=No
 
     if logy:
         ax.set_yscale('log')
+    # xlim auto range
+    tmp = np.isfinite(test).sum(-1)
+    tmp = np.where(tmp > 0)[0]
+    ax.set_xlim(dates[np.min(tmp)], dates[np.max(tmp)])
 
     ax.set_yticks(plevs)
     if yticklabels is not None:
@@ -253,3 +257,4 @@ def distance(ilon, ilat, lats, lons):
     z = np.sin(lats * np.pi / 180.)
     dists = ix * x + iy * y + iz * z
     return np.arccos(dists * 0.999999)
+

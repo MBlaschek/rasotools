@@ -3,7 +3,7 @@
 __all__ = ['location_change', 'sondetype', 'metadata']
 
 
-def location_change(lon, lat, dim='date', ilon=None, ilat=None, **kwargs):
+def location_change(lon, lat, dim='time', ilon=None, ilat=None, **kwargs):
     """ Convert location change to breakpoint series
 
     Args:
@@ -19,7 +19,7 @@ def location_change(lon, lat, dim='date', ilon=None, ilat=None, **kwargs):
     """
     import numpy as np
     from xarray import DataArray, full_like
-    from ..fun import distance
+    from ..fun.cal import distance
 
     # count occurence of each coordinate pair
     # use the most common (also the most recent?)
@@ -47,79 +47,64 @@ def location_change(lon, lat, dim='date', ilon=None, ilat=None, **kwargs):
         tmp = fdistance(lon[1:], lat[1:], lon[:-1], lat[:-1])
         tmp = np.append(tmp, tmp[-1])
         dist.values = tmp.reshape(ishape)
+
         dist.attrs['method'] = 'Backwards'
     else:
         tmp = fdistance(lon, lat, ilon, ilat)
         dist.values = tmp.reshape(ishape)
         dist.attrs['method'] = 'Point(%f E, %f N)' % (ilon, ilat)
-
+    dist.attrs['standard_name'] = 'distance'
     return dist
 
 
-def sondetype(data, dim='date', missing=None, **kwargs):
+def sondetype(data, dim='time', window=30, **kwargs):
     """ Make breakpoint series from sondetype changes
 
     Args:
         data (DataArray): Sondetype values
         dim (str): datetime dimension
-        thres (int, float): threshold for breakpoint
+        window (int): smoothing window
         **kwargs:
 
     Returns:
         DataArray : sondetype changes
     """
     import numpy as np
-    from .adj import idx2shp
-    from xarray import DataArray, full_like
+    from xarray import DataArray
 
     if not isinstance(data, DataArray):
         raise ValueError('requires a DataArray', type(data))
 
     data = data.copy()
-    if missing is not None:
-        if not isinstance(missing, (list, tuple)):
-            missing = [missing]
-
-        # Adjust values
-        for im in missing:
-            data.values = np.where(data.values == im, np.nan, data.values)
-
-    # replace NAN
-    data = data.ffill(dim=dim).bfill(dim=dim)
-    #
+    data = data.bfill(dim).rolling(center=True, **{dim: window}).median().bfill(dim).ffill(dim)
+    idx = [slice(None)] * len(data.dims)
     axis = data.dims.index(dim)
-    stype = full_like(data, 0, dtype=float)
-    stype.name = 'event'
-    idx = idx2shp(slice(1, None), axis, data.values.shape)
-    stype.values[idx] = np.apply_along_axis(np.diff, axis, data.values)
-    stype = stype.fillna(0)
-    stype.values = (stype.values != 0).astype(int)
-    return stype
+    n = data.coords[dim].size
+    idx[axis] = slice(0, n-1)
+    data.values[tuple(idx)] = (np.diff(data.values) != 0)
+    idx[axis] = n-1
+    data.values[tuple(idx)] = 0
+    data = data.rolling(center=True, **{dim: window}).mean().rolling(center=True, **{dim: window}).sum()
+    data /= 2
+    data = data.fillna(0)
+    return data
 
 
-def metadata(ident, dates, igra=None, wmo=None, return_dataframes=False, **kwargs):
-    """ Read IGRA and WMO _metadata along a given datetime axis
-
-    Args:
-        ident:
-        dates:
-        igra:
-        wmo:
-        return_dataframes:
-        **kwargs:
-
-    Returns:
-
-    """
+def metadata(ident, dates, dim='time', window=30, **kwargs):
     import numpy as np
     import pandas as pd
-    from .. import get_data
-    from ..fun import message
+    from ..fun import message, get_data
 
     if not isinstance(ident, (str, int)):
         raise ValueError("Requires a string or int Radiosonde ID")
+
     if not isinstance(dates, pd.DatetimeIndex):
         raise ValueError("Requires a pandas.DatetimeIndex")
+
+    data = pd.DataFrame(index=dates, columns=['day', 'igra_message', 'igra_event', 'wmo_sondetype', 'wmo_event'])
+    data['day'] = data.index.to_period('D')
+    data['igra_event'] = 0
+    data['wmo_event'] = 0
 
     igra_id = False
     if isinstance(ident, str):
@@ -128,41 +113,50 @@ def metadata(ident, dates, igra=None, wmo=None, return_dataframes=False, **kwarg
     else:
         ident = "%06d" % ident
 
-    # time IGRA, WMO vars
-    #      1     0
-
-    if igra is None:
-        igra = pd.read_json(get_data('igrav2_metadata.json'))
+    igra = pd.read_json(get_data('igrav2_metadata.json'))
 
     if igra_id:
-        igra = igra[igra.id == ident]
+        igra = igra[igra.igraid == ident]
     else:
         igra = igra[igra.wmoid == int(ident)]
 
-    message('IGRA Events:', igra.shape, mname='META', **kwargs)
-    event = igra.drop_duplicates('date').set_index('date')
-    event = pd.Series(1, index=event.index).reindex(dates).fillna(0)
+    message('[META] IGRA Events:', igra.shape, **kwargs)
+    if kwargs.get('verbose', 0) > 1:
+        print(igra)
 
-    if wmo is None:
-        wmo = pd.read_json(get_data('wmo_metadata.json'))
+    igra = igra.drop_duplicates('date').set_index('date')
+    igra.index = igra.index.tz_localize(tz=None)
+    igra['message'] = igra['befinfo'] + ' ' + igra['link'] + ' ' + igra['aftinfo'] + ' ' + igra['comment']
+    igra['message'] = igra['message'].str.strip()
+    for idate in (igra.index.tz_localize(tz=None)):
+        logic = abs(data.index - idate) <= pd.Timedelta(30, unit='d')
+        jdate = np.argmin(abs(data.index - idate))
+        message("[META]", idate, data.index[jdate], logic.sum(), data['day'].iloc[jdate], **kwargs)
+        idx = np.where(data['day'] == data['day'].iloc[jdate])[0]
+        data.iloc[idx, 2] = 1
+        data.iloc[idx, 1] = igra.loc[idate, 'message']
 
+    wmo = pd.read_json(get_data('wmo_metadata.json'))
     wmo = wmo[wmo.id.str.contains(ident)]
-    message('WMO Type changes', wmo.shape, mname='META', **kwargs)
-    iwmo = pd.Series(0, index=dates)
+    message('[META] WMO Type changes', wmo.shape, **kwargs)
+    data.index = data.index.tz_localize(tz='UTC')
     for row in wmo.iterrows():
-        iwmo.loc[slice(row[1]['start'], row[1]['stop'])] = row[1]['c']
+        data.loc[slice(row[1]['start'], row[1]['stop']), 'wmo_sondetype'] = row[1]['c']
 
-    print(iwmo.sum())
-    data = pd.concat([event, iwmo], axis=1, keys=['event_igra', 'sondetype_wmo'])
-    data['sondetype_wmo'] = data['sondetype_wmo'].replace(0, np.nan)
-    data['sondetype_wmo'] = data['sondetype_wmo'].replace(-1, np.nan)
-    data['sondetype_wmo'] = data['sondetype_wmo'].bfill().ffill()
-    data['event_wmo'] = 0
-    data.loc[1:, 'event_wmo'] = (np.diff(data.sondetype_wmo.values) != 0).astype(int)
-    data.index.name = 'date'
+    data = data.drop('day', axis=1)
+    data.index = data.index.tz_localize(tz=None)
+    message("[META] WMO", data['wmo_sondetype'].sum(), **kwargs)
+    data['wmo_sondetype'] = data['wmo_sondetype'].replace(0, np.nan)
+    data['wmo_sondetype'] = data['wmo_sondetype'].replace(-1, np.nan)
+    data.loc[1:, 'wmo_event'] = (np.diff(data.wmo_sondetype.rolling(window=30, center=False).median().bfill().values) != 0).astype(int)
+    # data.loc[1:, 'wmo_event'] = (np.diff((data.wmo_sondetype.bfill().ffill()).values) != 0).astype(int)
+    data.index.name = dim
     data = data.to_xarray()
-    if return_dataframes:
-        return data, igra, wmo
+    # resample and normalize
+    data['wmo_event'] = data['wmo_event'].rolling(center=True, **{dim: window}).sum().rolling(center=True, **{dim: window}).mean()
+    data['wmo_event'] /= data['wmo_event'].max()
+    data['igra_event'] = data['igra_event'].rolling(center=True, **{dim: window}).sum().rolling(center=True, **{dim: window}).mean()
+    data['igra_event'] /= data['igra_event'].max()
     return data
 
 
@@ -175,7 +169,7 @@ def wmo_code_table():
         DataFrame : Radiosonde Code Table C2
     """
     import pandas as pd
-    from .. import get_data
+    from ..fun import get_data
 
     return pd.read_csv(get_data('Common_C02_20181107_en.txt'))
 

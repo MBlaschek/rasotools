@@ -1,66 +1,28 @@
 # -*- coding: utf-8 -*-
 import os
-
-import numpy as np
 import xarray as xr
-
-from .fun import message, update_kw, dict_add
+from .fun import message, update_kw, dict_add, Bunch
 
 __all__ = ["Radiosonde", "open_radiosonde"]
 
 
-def dim_summary(obj):
-    """ Auxilliary class function for printing
+def open_radiosonde(name, ident=None, filename=None, directory=None, **kwargs):
+    """ Create a Radiosonde object from opening a dataset
+
+    Args:
+        name (str): used as filename and/or as dataset name
+        ident (str): radiosonde wmo or igra id
+        filename (str): filename to read from (netcdf)
+        directory (str): directory of radiosonde store, default config rasodir
+
+    Returns:
+        Radiosonde : Radiosonde class object
     """
-    if hasattr(obj, 'data_vars'):
-        return "%d vars [%s]" % (len(obj.data_vars), ", ".join(["%s(%s)" % (i, j) for i, j in obj.dims.items()]))
-
-    if hasattr(obj, 'shape'):
-        i = np.shape(obj)
-        if i != ():
-            return i
-
-    if hasattr(obj, 'size'):
-        i = np.size(obj)
-        if i == 1:
-            return obj
-        else:
-            return i
-
-    if isinstance(obj, (list, tuple, dict)):
-        i = len(obj)
-        if i == 1:
-            return obj
-        else:
-            return i
-
-    return obj
-
-
-def formatting(obj):
-    return u'<%s (%s)>' % (type(obj).__name__, dim_summary(obj))
-
-
-class Bunch(object):
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-    def __repr__(self):
-        return u"\n".join("%-10s : %s" % (i, formatting(getattr(self, i))) for i in self.__dict__.keys())
-
-    def __iter__(self):
-        # iter(self.__dict__)   # does the same
-        return (x for x in self.__dict__.keys())
-
-    def __getitem__(self, item):
-        return getattr(self, item)
-
-    def __setitem__(self, key, value):
-        setattr(self, key, value)
-
-    def __delitem__(self, key):
-        if key in self.__dict__.keys():
-            delattr(self, key)
+    if ident is None:
+        ident = "Unknown"
+    out = Radiosonde(ident)
+    out.add(name, filename=filename, directory=directory, **kwargs)
+    return out
 
 
 class Radiosonde(object):
@@ -99,21 +61,30 @@ class Radiosonde(object):
         if key in self.data:
             delattr(self.data, key)
 
-    def add(self, name, filename=None, directory=None, rename={}, cfunits=False, xwargs={}, **kwargs):
-        """ Add data to radiosonde class object [container]
+    def add(self, name, filename=None, directory=None, rename=None, cfunits=False, close=False, xwargs=None, **kwargs):
+        """ Add dataset to radiosonde class object [container]
 
         Args:
-            name (str): used as filename and/or as data name
+            name (str): used as filename and/or as dataset name
             filename (str): filename to read from (netcdf)
             directory (str): directory of radiosonde store, default config rasodir
             rename (dict): rename variables
             cfunits (bool): apply cfunits
             xwargs (dict): xarray open_dataset keywords
         """
+        if rename is None:
+            rename = {}
+
+        if xwargs is None:
+            xwargs = {}
+
         from . import config
 
         if self.directory is not None:
             directory = self.directory
+
+        if 'engine' not in xwargs.keys():
+            xwargs['engine'] = 'h5netcdf'
 
         if directory is None:
             if 'rasodir' in config and os.path.isdir(config.rasodir):
@@ -142,6 +113,9 @@ class Radiosonde(object):
                 return
 
         if '*' in filename:
+            if 'combine' not in xwargs.keys():
+                xwargs['combine'] = 'by_coords'
+
             try:
                 message("Reading ...", filename, **kwargs)
                 self.data[name] = xr.open_mfdataset(filename, **xwargs)
@@ -152,6 +126,14 @@ class Radiosonde(object):
         else:
             message("Reading ...", filename, **kwargs)
             self.data[name] = xr.open_dataset(filename, **xwargs)
+
+        if close:
+
+            # add this to make sure that a file is read and closed (some error with h5netcdf, h5py)
+
+            if hasattr(self.data[name], 'close'):
+                self.data[name].load()
+                self.data[name].close()
 
         self.data[name] = self.data[name].rename(rename)
 
@@ -199,7 +181,7 @@ class Radiosonde(object):
     def list_store(self, directory=None, varinfo=False, ncinfo=False):
         import time
         from . import config
-        from .fun import print_fixed, store_view
+        from . import fun as ff
 
         if self.directory is not None:
             directory = self.directory
@@ -219,38 +201,48 @@ class Radiosonde(object):
 
                 current = os.path.getsize(directory + ifile) / 1024 / 1024
                 itime = time.ctime(os.path.getctime(directory + ifile))
-                print("%-20s : %4d MB  : %s" % (ifile, current, itime))
+                print("%-40s : %4d MB  : %s" % (ifile, current, itime))
                 if '.nc' in ifile:
                     if varinfo:
                         with xr.open_dataset(directory + ifile) as f:
                             print("Variables:")
-                            print(print_fixed(list(f.data_vars), ',', 80, offset=10))
+                            print(ff.print_fixed(list(f.data_vars), ',', 80, offset=10))
                     elif ncinfo:
-                        store_view(directory + ifile)
+                        ff.netcdf.view(directory + ifile)
                     else:
                         pass
-                print('_' * 80)
+                # print('_' * 80)
                 summe += current
 
-            print("\n%20s : %4d MB" % ('Total', summe))
+            print("\n%40s : %4d MB" % ('Total', summe))
         else:
             print("Store not found!")
 
-    def to_netcdf(self, name, filename=None, directory=None, force=False, add_global=True, xwargs={}, **kwargs):
-        """Write each data variable to NetCDF 4
+    def to_netcdf(self, name, filename=None, directory=None, force=False, add_global=True, xwargs=None, **kwargs):
+        """Write each dataset variable to NetCDF 4
 
         Args:
-            name (str): data name
+            name (str): dataset name
             filename (str): filename
             directory (str): directory
             force (bool): force new file
+            add_global (bool):
+            xwargs (dict): xarray to_netcdf Options
+
         Result:
             bool : Status
         """
+        if xwargs is None:
+            xwargs = {}
+
         from . import config
 
         if not isinstance(name, list):
             name = [name]
+
+        if 'engine' not in xwargs.keys():
+            xwargs['engine'] = 'h5netcdf'
+            xwargs['format'] = 'netcdf4'
 
         if directory is None:
             if self.directory is not None:
@@ -266,57 +258,44 @@ class Radiosonde(object):
         attrs = vars(self.attrs)
 
         for iname in name:
-            if iname in self.data and isinstance(self.data[iname], (xr.DataArray, xr.Dataset)):
+            if iname in self.data:
+                if isinstance(self.data[iname], (xr.DataArray, xr.Dataset)):
 
-                if filename is None:
-                    ifilename = directory + '/' + iname + '.nc'
-                else:
-                    ifilename = filename
-
-                # Create directory if necessary
-                if os.path.isdir(os.path.dirname(ifilename)):
-                    idir = os.path.dirname(ifilename)
-                    message("makedir: ", idir, **kwargs)
-                    os.makedirs(idir, exist_ok=True)  # no Errors
-
-                message("Writing", ifilename, **kwargs)
-
-                iobj = getattr(self.data, iname)
-                if len(iobj.attrs) or add_global:
-                    iobj.attrs.update(attrs)  # add global attributes
-
-                for i in list(iobj.attrs.keys()):
-                    if iobj.attrs[i] is None:
-                        del iobj.attrs[i]
-
-                if force:
-                    xwargs.update({'mode': 'w'})
-                    force = False
-                else:
-                    if os.path.isfile(ifilename):
-                        xwargs.update({'mode': 'a'})
+                    if filename is None:
+                        ifilename = directory + '/' + iname + '.nc'
                     else:
+                        ifilename = filename
+
+                    # Create directory if necessary
+                    if not os.path.isdir(os.path.dirname(ifilename)):
+                        idir = os.path.dirname(ifilename)
+                        message("makedir: ", idir, **kwargs)
+                        os.makedirs(idir, exist_ok=True)  # no Errors
+
+                    message("Writing", ifilename, **kwargs)
+
+                    iobj = getattr(self.data, iname)
+                    if len(iobj.attrs) or add_global:
+                        iobj.attrs.update(attrs)  # add global attributes
+
+                    for i in list(iobj.attrs.keys()):
+                        if iobj.attrs[i] is None:
+                            del iobj.attrs[i]
+
+                    if 'engine' in xwargs.keys():
+                        if xwargs['engine'] == 'h5netcdf':
+                            xwargs['encoding'] = {i: {'compression': 'gzip', 'compression_opts': 9} for i in
+                                                  list(iobj.data_vars)}
+
+                    if force:
                         xwargs.update({'mode': 'w'})
-                iobj.to_netcdf(ifilename, **xwargs)
+                        force = False
+                    else:
+                        if os.path.isfile(ifilename):
+                            xwargs.update({'mode': 'a'})
+                        else:
+                            xwargs.update({'mode': 'w'})
+                    iobj.to_netcdf(ifilename, **xwargs)
 
-            else:
-                print("[DATA]", iname, "no Xarray object? ", type(iobj))
-
-
-def open_radiosonde(name, ident=None, filename=None, directory=None, **kwargs):
-    """ Create a Radiosonde object from opening a dataset
-
-    Args:
-        name (str): used as filename and/or as data name
-        ident (str): radiosonde wmo or igra id
-        filename (str): filename to read from (netcdf)
-        directory (str): directory of radiosonde store, default config rasodir
-
-    Returns:
-        Radiosonde : Radiosonde class object
-    """
-    if ident is None:
-        ident = "Unknown"
-    out = Radiosonde(ident)
-    out.add(name, filename=filename, directory=directory, **kwargs)
-    return out
+                else:
+                    message("Error unknown data type (xarray) ", iname, type(self.data[iname]), **kwargs)

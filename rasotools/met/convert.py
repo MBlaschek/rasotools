@@ -66,9 +66,10 @@ def to_rh(temp, dpd=None, spec_humi=None, press=None, method='HylandWexler', **k
         rvar.values = vpdata / svp(temp.values, method=method, p=press)
         origin = 't,q,p'
 
-    r_att = {'units': '1', 'standard_name': 'relativ_humidity', 'esat': method, 'origin': origin}
+    r_att = {'units': '1', 'standard_name': 'relativ_humidity', 'long_name': 'relative humidity',
+             'esat': method, 'origin': origin}
     if 'p' in kwargs.keys():
-        kwargs['p'] = 'enhancement_factor'
+        r_att['enhancement_factor'] = "yes"
 
     rvar.attrs.update(r_att)
     return rvar
@@ -155,13 +156,12 @@ def to_vp(temp, dpd=None, rel_humi=None, spec_humi=None, press=None, method='Hyl
         vpvar.values = sh2vap(spec_humi, press)
         origin = 'q'
 
-    attrs.update({'origin': origin, 'esat': method})
-    attrs.update(kwargs)
+    r_att = {'origin': origin, 'esat': method, 'standard_name': 'water_vapor_pressure',
+             'long_name': 'water vapor pressure','units': 'Pa'}
     if 'p' in kwargs.keys():
-        kwargs['p'] = 'enhancement_factor'
-    for ikey, ival in attrs.items():
-        vpvar.attrs[ikey] = ival
+        r_att['enhancement_factor'] = "yes"
 
+    vpvar.attrs.update(r_att)
     return vpvar
 
 
@@ -216,7 +216,6 @@ def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, svp_method=
             raise RuntimeError(funcid + "Conversion Q>DPD requires a pressure variable as well")
 
     dpdvar = temp.copy()
-    attrs = {'units': 'K', 'standard_name': 'dewpoint_depression'}
     for iatt in list(dpdvar.attrs.keys()):
         del dpdvar.attrs[iatt]
 
@@ -255,13 +254,12 @@ def to_dpd(temp, rel_humi=None, vp=None, spec_humi=None, press=None, svp_method=
         dpdvar.values = temp.values - dewpoint(vpdata, method=dewp_method, **kwargs)
         origin = 't,q,p'
 
-    attrs.update({'origin': origin, 'svp': svp_method, 'dewp': dewp_method})
-    attrs.update(kwargs)
+    r_att = {'origin': origin, 'svp': svp_method, 'dewp': dewp_method, 'standard_name': 'dew_point_depression',
+             'long_name': 'dew point depression', 'units': 'K'}
     if 'p' in kwargs.keys():
-        kwargs['p'] = 'enhancement_factor'
-    for ikey, ival in attrs.items():
-        dpdvar.attrs[ikey] = ival
+        r_att['enhancement_factor'] = "yes"
 
+    dpdvar.attrs.update(r_att)
     return dpdvar
 
 
@@ -313,7 +311,6 @@ def to_sh(vp=None, temp=None, rel_humi=None, dpd=None, press=None, method='Hylan
 
         qvar = temp.copy()
 
-    attrs = {'units': 'kg/kg', 'standard_name': 'specific_humidity'}
     for iatt in list(qvar.attrs.keys()):
         del qvar.attrs[iatt]
 
@@ -343,13 +340,12 @@ def to_sh(vp=None, temp=None, rel_humi=None, dpd=None, press=None, method='Hylan
         qvar.values = vap2sh(vpdata, press)
         origin = 't,dpd,p'
 
-    attrs.update({'origin': origin, 'esat': method})
-    attrs.update(kwargs)
+    r_att = {'origin': origin, 'esat': method, 'standard_name': 'specific_humidity',
+             'long_name': 'specific humidity', 'units': 'kg/kg'}
     if 'p' in kwargs.keys():
-        kwargs['p'] = 'enhancement_factor'
-    for ikey, ival in attrs.items():
-        qvar.attrs[ikey] = ival
+        r_att['enhancement_factor'] = "yes"
 
+    qvar.attrs.update(r_att)
     return qvar
 
 
@@ -403,7 +399,6 @@ def to_dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, s
 
         dewp = vp.copy()
 
-    attrs = {'units': 'K', 'standard_name': 'dewpoint'}
     for iatt in list(dewp.attrs.keys()):
         del dewp.attrs[iatt]
 
@@ -428,14 +423,12 @@ def to_dewpoint(vp=None, temp=None, rel_humi=None, spec_humi=None, press=None, s
         dewp.values = sh2vap(spec_humi.values, press)
         origin = 'q,p'
 
-    attrs.update({'origin': origin, 'svp': svp_method, 'dewp': dewp_method})
-    attrs.update(kwargs)
+    r_att = {'origin': origin, 'svp': svp_method, 'dewp': dewp_method, 'standard_name': 'dew_point',
+             'long_name': 'dew point', 'units': 'K'}
     if 'p' in kwargs.keys():
-        kwargs['p'] = 'enhancement_factor'
+        r_att['enhancement_factor'] = "yes"
 
-    for ikey, ival in attrs.items():
-        dewp.attrs[ikey] = ival
-
+    dewp.attrs.update(r_att)
     return dewp
 
 
@@ -466,13 +459,13 @@ def saturation_water_vapor(temp, method='HylandWexler', **kwargs):
             kwargs['p'] = _conform(press, evar.values.shape)
 
     evar.values = svp(temp.values, method=method, **kwargs)
-    attrs = {'units': 'Pa', 'standard_name': 'saturation_water_vapor_pressure', 'esat': method}
-    attrs.update(kwargs)
-    if 'p' in kwargs.keys():
-        kwargs['p'] = 'enhancement_factor'
-    for ikey, ival in attrs.items():
-        evar.attrs[ikey] = ival
 
+    r_att = {'svp': method, 'standard_name': 'saturation_water_vapor_pressure',
+             'long_name': 'saturation water vapor pressure', 'units': 'Pa'}
+    if 'p' in kwargs.keys():
+        r_att['enhancement_factor'] = "yes"
+
+    evar.attrs.update(r_att)
     # esat.mask(esat < 0)
     return evar
 
@@ -508,13 +501,12 @@ def total_precipitable_water(data, levels=None, min_levels=8, fill_nan=True, met
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
 
-    if 'standard_name' in data.attrs.keys():
-        if temp is None:
-            if 'specific' not in data.attrs['standard_name']:
-                raise RuntimeWarning("Standard Name does not say: specific; This Function requires specific humidity")
-        else:
-            if 'dew_point' not in data.attrs['standard_name']:
-                raise RuntimeError("dewpoint not found")
+    if 'standard_name' in data.attrs:
+        if 'specific' not in data.attrs['standard_name']:
+            raise RuntimeError("requires specific humidity")
+    else:
+        RuntimeWarning("requires specfifc humidty, no standard_name present")
+
     data = data.copy()
     ilev = data.get_dimension_by_axis('Z')
     if levels is not None:
@@ -534,13 +526,8 @@ def total_precipitable_water(data, levels=None, min_levels=8, fill_nan=True, met
         min_levels = len(levels)  # make sure we have exactly these levels
 
     values = data.values.copy()
-
-    if temp is not None:
-        # values = dpd2sh(values, temp.values, pin, method=method)
-        td = temp.values - values  # dew point
-        e = svp(td, method=method, **kwargs)  # water vapor
-        values = vap2sh(e, pin)  # specific humidity
-
+    # xarray_wrapper
+    # xarray_function_wrapper(data, wfunc=tpw, dim=dim, axis=axis, min_levels=min_levels, fill_nan=fill_nan)
     values = tpw(values, pin, axis=axis, min_levels=min_levels, fill_nan=fill_nan)
 
     # put into new array
@@ -552,11 +539,10 @@ def total_precipitable_water(data, levels=None, min_levels=8, fill_nan=True, met
 
     # Update Name and Units
     data.name = 'tpw'
-    data.attrs['units'] = 'mm'
-    data.attrs['standard_name'] = 'total_precipitable_water'
-    data.attrs['operator'] = 'q to TPW'
-    if levels is None:
-        data.attrs['tpw_minlevs'] = min_levels
+    r_att = {'standard_name': 'total_precipitable_water', 'min_levels': min_levels,
+             'long_name': 'total precipitable water', 'units': 'mm', 'converted': 'integ(q)/9.81'}
+
+    data.attrs.update(r_att)
 
     if return_counts:
         icounts = np.sum(np.isfinite(values), axis=axis) / float(plevs.size)  # relative
@@ -613,7 +599,7 @@ def vertical_interpolation(data, dim, levels=None, **kwargs):
     return data
 
 
-def adjust_dpd30(data, num_years=10, dim='date', subset=slice(None, '1994'), value=30, bins=None, thres=1,
+def adjust_dpd30(data, num_years=10, dim='time', subset=slice(None, '1994'), value=30, bins=None, thres=1,
                  return_mask=False,
                  **kwargs):
     """ Specifc Function to remove a certain value from the Histogram (DPD)

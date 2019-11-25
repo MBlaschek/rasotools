@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-from . import constants as con
 from .esat import svp
+from ..fun.constants import eps
 
 __all__ = ['sh2ppmv', 'sh2vap', 'vap2sh', 'ppmv2pa', 'rh2vap', 'rh2ppmv', 'dewpoint', 'frostpoint']
 
 
 def vap2ppmv(e, p):
+    """ Convert water vapor pressure into PPMV
+
+    Args:
+        e (float): water vapor pressure
+        p (float): air pressure
+
+    Returns:
+        e (float): PPMV
+    """
     return 1e6 * (e / (p - e))
 
 
@@ -23,7 +32,7 @@ def sh2vap(q, p):
     -------
     water vapor pressure [Pa]
     """
-    c = con.eps()  # Rd / Rv = 0.622
+    c = eps()  # Rd / Rv = 0.622
     return (q * p) / (q + (1 - q) * c)
 
 
@@ -78,7 +87,7 @@ def vap2sh(e, p):
     -------
     specific humidity (1 = kg/kg)
     """
-    c = con.eps()  # Rd/Rv
+    c = eps()  # Rd/Rv
     pa = p - e  # dry air pressure
     return (e * c) / (e * c + pa)
 
@@ -95,7 +104,7 @@ def vap2mix(e, p):
     -------
     mixing ratio (1)
     """
-    c = con.eps()  # Rd/Rv
+    c = eps()  # Rd/Rv
     return c * e / (p - e)
 
 
@@ -111,7 +120,7 @@ def mix2vap(x, p):
     -------
     water vapor pressure (Pa)
     """
-    c = con.eps()
+    c = eps()
     return x * p / (c + x)
 
 
@@ -372,7 +381,7 @@ def dewpoint_JMA(e, method='HylandWexler', tol=0.001, **kwargs):
     -------
     td          dew point       [K]
     """
-    from ..fun import fuzzy_equal
+    from ..fun.cal import fuzzy_equal
     verbose = kwargs.get('verbose', 0)
 
     @np.vectorize

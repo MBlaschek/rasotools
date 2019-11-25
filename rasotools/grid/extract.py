@@ -36,6 +36,7 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, dim=None, de
     if method not in ['point', 'bilinear', 'distance']:
         raise ValueError("Method unknown: point, bilinear, distance")
 
+    data = data.copy()
     locations = []
     lon = np.array(lon)
     lat = np.array(lat)
@@ -67,6 +68,14 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, dim=None, de
     dattrs = dict(data.attrs)
     newcoords = {i: data[i].copy() for i in iorder}
 
+    if len(iorder) == 0:
+        if dim is None:
+            iorder = ['station']
+            dim = 'station'
+        else:
+            iorder = [dim]
+
+    mm = 0
     for jlon, jlat in zip(lon, lat):
         try:
             # indices and weights for location
@@ -79,13 +88,13 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, dim=None, de
                 weights = np.array([1.])
 
             elif method == 'distance':
-                ix, iy, weigths = distance_weights(lons, lats, jlon, jlat)
+                ix, iy, weights = distance_weights(lons, lats, jlon, jlat)
 
             else:
                 idx, points = rectangle(jlon, jlat, lons, lats)
                 ix, iy, weights = bilinear_weights(jlon, jlat, idx, lons, lats)
                 # Example for ERA-Interim GRID
-                # plot_weights(ix, iy, weights, data.values[0, 0, :, :], lons, lats, jlon, jlat,
+                # plot_weights(ix, iy, weights, dataset.values[0, 0, :, :], lons, lats, jlon, jlat,
                 #               lonlat=ilon < ilat, dx=-np.diff(lons).mean() / 2., dy=np.diff(lats).mean() / 2.)
             indices[ilon] = ix
             indices[ilat] = iy
@@ -116,9 +125,10 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, dim=None, de
                 dattrs['cell_method'] = "%s,%s: intp(%s)" % (name_lon, name_lat, method)
                 newcoords[name_lon] = jlon - 360. if jlon > 180 else jlon
                 newcoords[name_lat] = jlat
+                newcoords[dim] = [mm]
                 tmp = DataArray(tmp, coords=newcoords, dims=iorder, name=data.name, attrs=dattrs)
             locations.append(tmp.copy())
-
+            mm += 1
         except Exception as e:
             if debug:
                 raise e
@@ -132,6 +142,11 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, dim=None, de
     if dim is not None:
         locations = concat(locations, dim=dim)
 
+    elif len(iorder) == 0:
+        locations = concat(locations, dim='station')
+
+    else:
+        pass
     return locations
 
 
@@ -232,11 +247,12 @@ def distance_weights(lons, lats, ilon, ilat):
     else:
         idy = [iy - 1, iy]
 
-    dist = np.full((2, 2), 1, dtype=np.float)
-    for k, i in enumerate(idx):
-        for l, j in enumerate(idy):
-            dist[l, k] = 1 / distance(ilon, ilat, lons[i], lats[j])
-    return idx, idy, (dist / np.sum(dist))
+    dist = []
+    for i in idx:
+        for j in idy:
+            dist.append(1 / distance(ilon, ilat, lons[i], lats[j]))
+    dist = np.array(dist)
+    return [idx[0], idx[0], idx[1], idx[1]], [idy[0], idy[1], idy[0], idy[1]], (dist / np.sum(dist))
 
 
 def distance(lon, lat, lon0, lat0):

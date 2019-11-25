@@ -55,8 +55,8 @@ def reference_table():
     """Table 1 from Murphy and Koop (2005)
     Values of Saturation Water Vapor Pressure over liquid and ice.
     """
-    print(""" This data has been calculated by Murphy and Koop (2005)
-    and can be used as reference data for saturation water vapor pressure.
+    print(""" This dataset has been calculated by Murphy and Koop (2005)
+    and can be used as reference dataset for saturation water vapor pressure.
     IAPWS 97 Values give:
      T (C)   Es (Pa)
     -60.00  1.0813475449

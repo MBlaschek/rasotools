@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
-from ..fun import nanfunc
+from ..fun.cal import nanfunc
 
 __all__ = ['mean', 'percentile']
 
@@ -11,10 +11,10 @@ def mean(sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, 
     """ Adjustment method using mean differences or ratios
 
     ratio=False
-    data[sampleout]  + (MEAN(data[sample1]) - MEAN(data[sample2]))
+    dataset[sampleout]  + (MEAN(dataset[sample1]) - MEAN(dataset[sample2]))
 
     ratio=True
-    data[sampleout]  * (MEAN(data[sample1]) / MEAN(data[sample2]))
+    dataset[sampleout]  * (MEAN(dataset[sample1]) / MEAN(dataset[sample2]))
 
     Args:
         sample1 (np.ndarray): reference
@@ -27,7 +27,7 @@ def mean(sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, 
         max_sample (int): maximum sample size
 
     Returns:
-        np.ndarray : mean adjusted data
+        np.ndarray : mean adjusted dataset
     """
     # minimum sample size, maximum sample size
     if median:
@@ -35,13 +35,13 @@ def mean(sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, 
                      axis=axis,
                      n=sample_size,
                      nmax=max_sample,
-                     func=np.nanmedian,
+                     ffunc=np.nanmedian,
                      borders=borders)
         s2 = nanfunc(sample2,
                      axis=axis,
                      n=sample_size,
                      nmax=max_sample,
-                     func=np.nanmedian,
+                     ffunc=np.nanmedian,
                      borders=borders,
                      flip=True)
     else:
@@ -49,13 +49,13 @@ def mean(sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, 
                      axis=axis,
                      n=sample_size,
                      nmax=max_sample,
-                     func=np.nanmean,
+                     ffunc=np.nanmean,
                      borders=borders)
         s2 = nanfunc(sample2,
                      axis=axis,
                      n=sample_size,
                      nmax=max_sample,
-                     func=np.nanmean,
+                     ffunc=np.nanmean,
                      borders=borders,
                      flip=True)
 
@@ -73,7 +73,7 @@ def mean(sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, 
 def meanvar(sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=1460, **kwargs):
     """ Adjustment method using mean differences or ratios
 
-    data[sampleout]  + (MEAN(data[sample1]) - MEAN(data[sample2]))
+    dataset[sampleout]  + (MEAN(dataset[sample1]) - MEAN(dataset[sample2]))
 
     Args:
         sample1 (np.ndarray): reference
@@ -84,32 +84,32 @@ def meanvar(sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=146
         max_sample (int): maximum sample size
 
     Returns:
-        np.ndarray : mean adjusted data
+        np.ndarray : mean adjusted dataset
     """
     s1 = nanfunc(sample1,
                  axis=axis,
                  n=sample_size,
                  nmax=max_sample,
-                 func=np.nanmean,
+                 ffunc=np.nanmean,
                  borders=borders)
     s2 = nanfunc(sample2,
                  axis=axis,
                  n=sample_size,
                  nmax=max_sample,
-                 func=np.nanmean,
+                 ffunc=np.nanmean,
                  borders=borders,
                  flip=True)
     s1v = nanfunc(sample1,
                   axis=axis,
                   n=sample_size,
                   nmax=max_sample,
-                  func=np.nanvar,
+                  ffunc=np.nanvar,
                   borders=borders)
     s2v = nanfunc(sample2,
                   axis=axis,
                   n=sample_size,
                   nmax=max_sample,
-                  func=np.nanvar,
+                  ffunc=np.nanvar,
                   borders=borders,
                   flip=True)
 
@@ -126,10 +126,10 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
     """ Adjustment method using percentile differences or ratios
 
     ratio=False
-    data[sample1] + ( percentiles(data[sample1]) - percentiles(data[sample2]) )
+    dataset[sample1] + ( percentiles(dataset[sample1]) - percentiles(dataset[sample2]) )
 
     ratio=True
-    data[sample1] * ( percentiles(data[sample1]) / percentiles(data[sample2]) )
+    dataset[sample1] * ( percentiles(dataset[sample1]) / percentiles(dataset[sample2]) )
 
     Args:
         sample1 (np.ndarray): reference
@@ -142,24 +142,24 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
         max_sample (int): maximum sample size
 
     Returns:
-        np.ndarray : percentile adjusted data
+        np.ndarray : percentile adjusted dataset
     """
     # Add 0 and 100, and remove them
     percentiles = np.unique(np.concatenate([[0], percentiles, [100]]))
     percentiles = percentiles[1:-1]  # remove 0 and 100
 
     # Sample sizes are enough?
-    # nsample1 = np.isfinite(data[sample1]).sum(axis=axis) > sample_size
-    # nsample2 = np.isfinite(data[sample2]).sum(axis=axis) > sample_size
+    # nsample1 = np.isfinite(dataset[sample1]).sum(axis=axis) > sample_size
+    # nsample2 = np.isfinite(dataset[sample2]).sum(axis=axis) > sample_size
 
     # Percentiles of the samples
-    # s1 = np.nanpercentile(data[sample1], percentiles, axis=axis)
-    # s2 = np.nanpercentile(data[sample2], percentiles, axis=axis)
+    # s1 = np.nanpercentile(dataset[sample1], percentiles, axis=axis)
+    # s2 = np.nanpercentile(dataset[sample2], percentiles, axis=axis)
     s1 = nanfunc(sample1,
                  axis=axis,
                  n=sample_size,
                  nmax=max_sample,
-                 func=np.nanpercentile,
+                 ffunc=np.nanpercentile,
                  borders=borders,
                  fargs=(percentiles,))
 
@@ -167,7 +167,7 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
                  axis=axis,
                  n=sample_size,
                  nmax=max_sample,
-                 func=np.nanpercentile,
+                 ffunc=np.nanpercentile,
                  borders=borders,
                  fargs=(percentiles,),
                  flip=True)
@@ -181,7 +181,7 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
         # dep = np.where(nsample1 & nsample2, dep, 0.)  # apply sample size
         dep = np.where(np.isfinite(dep), dep, 0.)
 
-    # Interpolate adjustments to sampleout shape and data
+    # Interpolate adjustments to sampleout shape and dataset
     if apply is None:
         dep = apply_percentile_adjustments(sample2, s2, dep, axis=axis)
 
@@ -215,13 +215,13 @@ def apply_percentile_adjustments(data, percentiles, adjustment, axis=0):
     """ Helper Function for applying percentile adjustments
 
     Args:
-        data (np.ndarray): data
+        data (np.ndarray): dataset
         percentiles (np.ndarray): percentiles, points of adjustments
         adjustment (np.ndarray): adjustments to be interpolated
         axis (int): axis of datetime
 
     Returns:
-        np.ndarray : interpolated adjustment, same shape as data
+        np.ndarray : interpolated adjustment, same shape as dataset
     """
     in_dims = list(range(data.ndim))
     # last dim == axis, Last dim should be time/date

@@ -4,22 +4,22 @@
 __all__ = ['temperature', 'specific_humidity', 'relative_humidity', 'water_vapor_pressure', 'dew_point_depression']
 
 
-def temperature(data, dim='pres', return_logic=False, **kwargs):
+def temperature(data, dim='pres', return_flags=False, **kwargs):
     """ Quality control of Temperatures with RTTOV Profile limits
 
     Args:
         data (DataArray): temperatures [K]
         dim (str): pressure
-        return_logic (bool): return Mask
+        return_flags (bool): return Mask
         **kwargs:
 
     Returns:
-        DataArray : quality controlled data
+        DataArray : quality controlled dataset
     """
     import numpy as np
     from xarray import DataArray
-    from .. import config, load_rttov
-    from ..fun import message
+    from .. import config
+    from ..fun import message, load_rttov
 
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray, ", type(data))
@@ -44,14 +44,14 @@ def temperature(data, dim='pres', return_logic=False, **kwargs):
         pin = rt.Pressure.values * 100.  # hPa to Pa
 
     tmins = np.interp(np.log(pressure), np.log(pin), tmin, left=tmin.min(), right=tmin.max())
-    # for i, idim in enumerate(data.dims):
+    # for i, idim in enumerate(dataset.dims):
     #     if idim == dim:
     #         continue
     #     tmins = np.expand_dims(tmins, axis=i)
 
     tmins = np.broadcast_to(tmins, data.values.shape)
     tmaxs = np.interp(np.log(pressure), np.log(pin), tmax, left=tmax.min(), right=tmax.max())
-    # for i, idim in enumerate(data.dims):
+    # for i, idim in enumerate(dataset.dims):
     #     if idim == dim:
     #         continue
     #     tmaxs = np.expand_dims(tmaxs, axis=i)
@@ -61,9 +61,12 @@ def temperature(data, dim='pres', return_logic=False, **kwargs):
 
     tcor = np.sum(logic)  # number of corrected values
     message("Temperatures %d [%d]" % (tcor, np.sum(np.isfinite(data.values))), **kwargs)
-    if return_logic:
-        return logic
+    if return_flags:
+        return DataArray(data=logic, coords=data.coords, dims=data.dims,
+                         name=data.name+'_qcflag',
+                         attrs={'QC': "RTTOV Profile limits (%d)" % tcor})
 
+    data = data.copy()
     data.values = np.where(logic, np.nan, data.values)  # replace
     data.attrs['QC'] = "RTTOV Profile limits (%d)" % tcor
     return data
@@ -79,13 +82,13 @@ def specific_humidity(data, dim='pres', return_logic=False, **kwargs):
         **kwargs:
 
     Returns:
-        DataArray : quality controlled data
+        DataArray : quality controlled dataset
     """
     import numpy as np
     from xarray import DataArray
     from .humidity import vap2sh
-    from .. import config, load_rttov
-    from ..fun import message
+    from .. import config
+    from ..fun import message, load_rttov
 
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray, ", type(data))
@@ -135,7 +138,7 @@ def relative_humidity(data, return_logic=False, **kwargs):
         **kwargs:
 
     Returns:
-        DataArray : quality controlled data
+        DataArray : quality controlled dataset
     """
     import numpy as np
     from xarray import DataArray
@@ -172,7 +175,7 @@ def dew_point_depression(data, return_logic=False, **kwargs):
         **kwargs:
 
     Returns:
-        DataArray : quality controlled data
+        DataArray : quality controlled dataset
     """
     import numpy as np
     from xarray import DataArray
@@ -210,13 +213,13 @@ def water_vapor_pressure(data, dim='pres', return_logic=False, **kwargs):
         **kwargs:
 
     Returns:
-        DataArray : quality controlled data
+        DataArray : quality controlled dataset
     """
     import numpy as np
     from xarray import DataArray
     from .humidity import ppmv2pa
-    from .. import config, load_rttov
-    from ..fun import message
+    from .. import config
+    from ..fun import message, load_rttov
 
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray, ", type(data))

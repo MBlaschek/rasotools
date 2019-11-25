@@ -70,7 +70,7 @@ def table(data, level_column, levels, min_levels=3, keep=False):
     import numpy as np
     import pandas as pd
 
-    # data = data.iloc[np.unique(data[level_column], return_index=True)[1], :]   # subset
+    # dataset = dataset.iloc[np.unique(dataset[level_column], return_index=True)[1], :]   # subset
     data = data.sort_values(level_column)   # no subset
     pin = data[level_column].values
     data.drop(level_column, 1, inplace=True)
@@ -96,7 +96,7 @@ def profile(data, plevs, new_plevs):
     """ Modified numpy.interp Function for filtering nan
 
     Args:
-        data (numpy.ndarray): Input data
+        data (numpy.ndarray): Input dataset
         plevs (numpy.ndarray): Input pressure levels
         new_plevs (numpy.ndarray): Output pressure levels
 
@@ -106,7 +106,7 @@ def profile(data, plevs, new_plevs):
     import numpy as np
     data = np.squeeze(data)  # remove 1-dims
     ix = np.isfinite(data)  # only finite values
-    s = ix.sum()  # enough data left ?
+    s = ix.sum()  # enough dataset left ?
     if s > 0:
         plevs, data = np.unique([plevs[ix], data[ix]], axis=1)
         data = np.interp(np.log(new_plevs), np.log(plevs), data, left=np.nan, right=np.nan)
@@ -118,14 +118,14 @@ def profile_uncertainty(data, uncert, plevs, new_plevs):
     """ Modified np.interp Function for filtering nan and using uncertainty
 
     Args:
-        data (numpy.ndarray): Input data
+        data (numpy.ndarray): Input dataset
         uncert (numpy.ndarray): Input uncertainty
         plevs (numpy.ndarray): Input pressure levels
         new_plevs (numpy.ndarray): Output pressure levels
 
     Returns:
         tuple :
-            numpy.ndarray : interpolated data
+            numpy.ndarray : interpolated dataset
             numpy.ndarray : interpolated uncertainty
     """
     import numpy as np
@@ -138,7 +138,7 @@ def profile_uncertainty(data, uncert, plevs, new_plevs):
 
     data = np.squeeze(data)  # remove 1-dims
     ix = np.isfinite(data)  # only finite values
-    s = ix.sum()  # enough data left ?
+    s = ix.sum()  # enough dataset left ?
     if s > 0:
         plevs, data = np.unique([plevs[ix], data[ix]], axis=1)
         # todo add uncertainty from interpolation, due to spacing
@@ -148,11 +148,11 @@ def profile_uncertainty(data, uncert, plevs, new_plevs):
 
 
 #
-# def interp_profile(data, plevs, new_plevs, min_levels=3):
+# def interp_profile(dataset, plevs, new_plevs, min_levels=3):
 #     """ Modified np.interp Function for filtering NAN
 #
 #     Args:
-#         data (ndarray): Input Data
+#         dataset (ndarray): Input Data
 #         plevs (ndarray): Input pressure levels
 #         new_plevs (ndarray): Output pressure levels
 #         min_levels (int): minimum required pressure levels
@@ -160,17 +160,17 @@ def profile_uncertainty(data, uncert, plevs, new_plevs):
 #     Returns:
 #     ndarray : size of new_plevs
 #     """
-#     data = np.squeeze(data)  # remove 1-dims
-#     ix = np.isfinite(data)  # only finite values
+#     dataset = np.squeeze(dataset)  # remove 1-dims
+#     ix = np.isfinite(dataset)  # only finite values
 #     s = ix.sum()
 #     if s > 0:
 #         if s > min_levels:
-#             data = np.interp(np.log(new_plevs), np.log(plevs[ix]), data[ix], left=np.nan, right=np.nan)
-#             return data
+#             dataset = np.interp(np.log(new_plevs), np.log(plevs[ix]), dataset[ix], left=np.nan, right=np.nan)
+#             return dataset
 #         jx = np.in1d(plevs[ix], new_plevs)  # index of finite values
 #         if len(jx) > 0:
 #             kx = np.in1d(new_plevs, plevs[ix])  # index of finite values in new pressure levels
 #             out = np.full_like(new_plevs, np.nan)
-#             out[kx] = data[ix][jx]
+#             out[kx] = dataset[ix][jx]
 #             return out  # just a few values
 #     return np.full_like(new_plevs, np.nan)  # Nothing to do

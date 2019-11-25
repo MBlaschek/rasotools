@@ -2,21 +2,125 @@
 
 __all__ = ['points', 'costfunction', 'station']
 
+# todo add grid definitions of reanalysis
+# for plotting
+era5_grid = {'lon': None, 'lat': None}
+erai_grid = None
+jra55_grid = None
+cera_grid = None
 
-def station(lon, lat, label=None, marker='o', markersize=20, ax=None, filename=None, **kwargs):
-    # plot a map of location, if lon, lat are vector data,
-    # plot a polar
-    # locs = pd.DataFrame({'lon':lon,'lat':lat})
-    # nfo = locs.groupby(by=['lon','lat']).size().reset_index().rename(columns={0:'counts'})
-    #          lon    lat      counts
-    # 0  16.35  48.23    376
-    # 1  16.36  48.25   3915
-    # 2  16.37  48.23   9602
-    # 3  16.37  48.25  39373
-    # -> index gibt die farbe, größe durch counts
-    # zuerst die größeren plotten
-    # markersize > dem größten und die anderen kleiner, aber nie unter 1
-    pass
+
+def station_class(sonde, **kwargs):
+    from .. import Radiosonde
+    if not isinstance(sonde, Radiosonde):
+        raise ValueError('Requires a Radiosonde class object')
+    for iatt in sonde.attrs:
+        if 'lon' in iatt:
+            lon = sonde.attrs[iatt]
+            if isinstance(lon, str):
+                for i in lon.split(' '):
+                    try:
+                        lon = float(i)
+                    except:
+                        pass
+
+        if 'lat' in iatt:
+            lat = sonde.attrs[iatt]
+            if isinstance(lat, str):
+                for i in lat.split(' '):
+                    try:
+                        lat = float(i)
+                    except:
+                        pass
+    print(lon, lat)
+    return station(lon, lat, **kwargs)
+
+
+def station(lon, lat, label=None, marker='o', markersize=20, bounds=1, ax=None, data=None, **kwargs):
+    import numpy as np
+    import cartopy as cpy
+    import matplotlib.pyplot as plt
+    from ..fun import check_kw
+    # from cartopy.feature import NaturalEarthFeature
+    # coast = NaturalEarthFeature(category='physical', scale='10m', facecolor='none', name='coastline')
+
+    # have a time component? -> plot as time series
+    if data is not None:
+        if lon in data:
+            lon = data[lon].values
+        if lat in data:
+            lat = data[lat].values
+
+    else:
+        lon = np.asarray(lon)
+        lat = np.asarray(lat)
+
+    itx = np.isfinite(lon) & np.isfinite(lat)
+    lon = lon[itx]
+    lat = lat[itx]
+
+    if lon.size != lat.size:
+        raise ValueError("Lon and Lat need same size")
+
+    # todo add number of points plotted / median distance
+    ilon = np.median(lon)
+    ilat = np.median(lat)
+    projection = kwargs.get('projection', cpy.crs.PlateCarree())
+    if ax is None:
+        ax = plt.axes(projection=projection)
+
+    ax.set_extent((ilon - bounds, ilon + bounds, ilat - bounds, ilat + bounds), crs=projection)
+    if check_kw('ocean', value=True, **kwargs):
+        ax.add_feature(cpy.feature.OCEAN.with_scale('10m'), zorder=0)
+    if check_kw('land', value=True, **kwargs):
+        ax.add_feature(cpy.feature.LAND.with_scale('10m'), zorder=0)
+    if check_kw('coastline', value=True, **kwargs):
+        ax.add_feature(cpy.feature.COASTLINE.with_scale('10m'), zorder=0)
+    # ax.coastlines()
+    if check_kw('rivers', value=True, **kwargs):
+        ax.add_feature(cpy.feature.RIVERS.with_scale('10m'), zorder=1)
+    if check_kw('lakes', value=True, **kwargs):
+        ax.add_feature(cpy.feature.LAKES.with_scale('10m'), zorder=1)
+    if check_kw('borders', value=True, **kwargs):
+        ax.add_feature(cpy.feature.BORDERS.with_scale('10m'), zorder=1)
+    if check_kw('states', value=True, **kwargs):
+        ax.add_feature(cpy.feature.STATES.with_scale('10m'), zorder=1)
+
+    ax.scatter(lon, lat, s=markersize, c=kwargs.get('color', 'r'), transform=projection, zorder=10,
+               edgecolor='k')  # ontop
+    try:
+        gl = ax.gridlines(draw_labels=True, xlocs=kwargs.get('xlocs', None), ylocs=kwargs.get('ylocs', None),
+                          linewidth=0.5, linestyle='--', color='k')
+        gl.xformatter = cpy.mpl.gridliner.LONGITUDE_FORMATTER
+        gl.yformatter = cpy.mpl.gridliner.LATITUDE_FORMATTER
+        gl.xlabels_top = False
+        gl.ylabels_right = False
+    except:
+        ax.gridlines(draw_labels=False)
+
+    ax.set_extent((ilon - bounds, ilon + bounds, ilat - bounds, ilat + bounds), crs=projection)
+    left = 0.5
+    bottom = 0.13
+    width = 0.3
+    height = 0.2
+    rect = [left, bottom, width, height]
+    ax2 = plt.axes(rect, projection=cpy.crs.PlateCarree())
+    ax2.set_extent((ilon - 30, ilon + 30, ilat - 30, ilat + 30))
+    # ax2.set_global()  #will show the whole world as context
+
+    ax2.coastlines(resolution='110m', zorder=2)
+    ax2.add_feature(cpy.feature.LAND)
+    ax2.add_feature(cpy.feature.OCEAN)
+
+    ax2.gridlines()
+
+    lon0, lon1, lat0, lat1 = ax.get_extent()
+    box_x = [lon0, lon1, lon1, lon0, lon0]
+    box_y = [lat0, lat0, lat1, lat1, lat0]
+
+    plt.plot(box_x, box_y, color='red', transform=cpy.crs.Geodetic())
+
+    return ax
 
 
 def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=True, coastlines=True, rivers=False,
@@ -96,9 +200,11 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
                        edgecolor='k')
 
     if labels is not None:
-        for i, j, l in zip(lon, lat, labels):
-            # bbox=dict(facecolor='white', alpha=0.40, edgecolor='none'),
-            ax.text(i + lloffset, j, str(l), horizontalalignment='left', verticalalignment='top',
+        if not hasattr(lloffset, '__iter__'):
+            lloffset = [lloffset] * len(labels)
+
+        for i, j, l, k in zip(lon, lat, labels, lloffset):
+            ax.text(i + k, j, str(l), horizontalalignment='left', verticalalignment='top',
                     transform=projection, fontsize=kwargs.get('fontsize', 8), zorder=12,
                     clip_on=True)
 
@@ -123,7 +229,7 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
     else:
         title = 'Stations # %d' % np.size(lon)
 
-    ax.set_title(kwargs.get('title', '') + title)
+    ax.set_title(kwargs.get('title', '') +' '+ title)
 
     if 'xlabel' in kwargs.keys():
         ax.set_xlabel(kwargs.get('xlabel'))

@@ -1,111 +1,176 @@
 # -*- coding: utf-8 -*-
-import os
 import numpy as np
 import pandas as pd
 import xarray as xr
+import matplotlib.pyplot as plt
 
-__all__ = ['Network']
+__all__ = ['Network', 'network_from_stationlist', 'network_from_datafiles']
+
+
+def network_from_stationlist(name, stationlist, ident='wmo', lon='lon', lat='lat'):
+    new = Network(name)
+    new.idents = list(stationlist[ident])
+    new.lon = stationlist[lon].values
+    new.lat = stationlist[lat].values
+    new.stations = stationlist
+    return new
+
+
+def network_from_datafiles(name, pattern, directory=None, **kwargs):
+    from .fun.station import build_stationlist_from_netcdf_archive
+    #
+    # find files
+    # read meta information from files
+    #
+    stationlist = build_stationlist_from_netcdf_archive(pattern, directory=directory, **kwargs)
+    new = network_from_stationlist(name, stationlist)
+
+    return new
 
 
 class Network(object):
-    def __init__(self, name=None, idents=None, center_lon=None, center_lat=None, distance=None):
-        self.name = name if name is not None else "Standard"
-        self.sondes = list()
+    """ Network of Radiosonde stations
+    name
+
+
+    """
+
+    def __init__(self, name, idents=None):
+        if not isinstance(name, str):
+            raise ValueError("Name needs to be s string")
+
+        self.name = name
+        if idents is not None:
+            if not isinstance(idents, list):
+                idents = [idents]
+            self.idents = idents
+        else:
+            self.idents = list()
+
         self.lon = None
         self.lat = None
         self.distance = None
         self.weights = None
         self.data = None
-        self._rslist = None
-
-        if idents is not None:
-            if not isinstance(idents, list):
-                idents = [idents]
-            self.sondes = idents
-
-        if center_lon is not None and center_lat is not None and distance is not None:
-            self.distance = distance
-            self.lon = center_lon
-            self.lat = center_lat
-            self.sondes = self.get_idents(center_lon, center_lat, distance)
-        self.nsondes = len(self.sondes)
+        self.stations = None
 
     def __repr__(self):
-        summary = u"Network {name} ({nsondes}) Lon: {lon} [deg] Lat: {lat} [deg] Dist: {distance} [km]".format(
-            **self.__dict__)
-        summary += u"\nData: {data} Weights: {weights}".format(
-            **{'data': self.data is not None, 'weights': self.weights is not None})
+        return "%s  (%d)" % (self.name, len(self.idents))
 
-        if self.data is not None:
-            summary += "\n Data:\n"
-            summary += repr(self.data).replace('\n', '\n - ')
+    def __iter__(self):
+        # iter(self.__dict__)   # does the same
+        return (x for x in self.idents)
 
-        return summary
-    #
+    def __getitem__(self, item):
+        if item in self.idents:
+            i = self.idents.index(item)
+            return self.stations.iloc[i]
+        return None
+
     # def __setitem__(self, key, value):
-    #     if not isinstance(value, (list, tuple)):
-    #         raise ValueError("Set Radiosonde:  [ID] = (lon, lat)")
-    #     if key not in self.sondes:
-    #         self.sondes.append(key)
-    #         self.lon.append(value[0])
-    #         self.lat.append(value[1])
-    #     else:
-    #         idx = self.sondes.index(key)
-    #         print(self.lon[idx], self.lat[idx], ">", value)
-    #         self.lon[idx] = value[0]
-    #         self.lat[idx] = value[1]
-    #
+    #     if isinstance(value, (tuple, list)):
+    #         if
+    #         self.idents.append()
+    #     setattr(self, key, value)
+
     # def __delitem__(self, key):
-    #     if key in self.sondes:
-    #         idx = self.sondes.index(key)
-    #         self.sondes.pop(idx)
-    #         self.lon.pop(idx)
-    #         self.lat.pop(idx)
-    #
-    # def __getitem__(self, key):
-    #     if key in self.sondes:
-    #         idx = self.sondes.index(key)
-    #         return self.sondes[idx], self.lon[idx], self.lat[idx]
+    #     if key in self.__dict__.keys():
+    #         delattr(self, key)
 
-    def get_idents(self, lon, lat, distance, filename=None):
-        from .fun import distance as f_dist
-        from .io import read_radiosondelist
-
-        if self._rslist is None:
-            sondes = read_radiosondelist(filename=filename)
+    def _calculate_dist_matrix(self):
+        from .fun.cal import distance
+        if self.lon is not None and self.lat is not None:
+            print("Calculating Distance Matrix ...")
+            result = [distance(self.lon, self.lat, ilon, ilat) for ilon, ilat in zip(self.lon, self.lat)]
+            self.distance = pd.DataFrame(result, index=self.idents, columns=self.idents)
         else:
-            sondes = self._rslist
+            raise RuntimeError("Network is missing lon, lat information")
 
-        sondes['dist'] = [f_dist(lon, lat, i[1].lon, i[1].lat) for i in sondes.iterrows()]
-        self._rslist = sondes
-        return list(sondes[sondes.dist <= distance].index)
+    def neighboring_stations(self, ident, distance):
+        if self.distance is None:
+            self._calculate_dist_matrix()
 
-    def calculate_weights(self, lon=None, lat=None, distance=None):
-        if hasattr(self, lon) and hasattr(self, lat):
-            lon = self.lon
-            lat = self.lat
-            if hasattr(self, distance):
-                distance = self.distance
+        if ident not in self.idents:
+            raise ValueError("Ident not found", ident)
 
-        if lon is None or lat is None or distance is None:
-            raise RuntimeError()
+        result = self.distance.loc[ident].sort_values()
+        return pd.Series(result[result <= distance], name='dist_%s_km' % ident)
 
-        self.weights = 0
+    def add(self, ident, **kwargs):
+        pass
 
-    def open_data(self, filename_pattern=None, directory=None, drop_variables=None):
+    def set_station(self, ident, lon, lat):
+        pass
+
+    def del_station(self, ident):
+        pass
+
+    def load_data(self, files=None, pattern=None, directory=None, variables=None, invert_selection=False, **kwargs):
         from .fun import find_files
-        files = find_files(directory, filename_pattern, recursive=True)
-        # filter with sonde ids ?
-        index = pd.Index(self.sondes, name='sondes')
-        self.data = xr.open_mfdataset(files, concat_dim=index)
-        print(self.data)
+        from . import config
 
-    def table(self, idents=None, filename=None):
-        from .io import read_radiosondelist
-        if idents is None:
-            idents = self.sondes
+        def iadd_id(x):
+            return _add_id(x, variables, invert=invert_selection)
 
-        if self._rslist is None:
-            self._rslist = read_radiosondelist(filename=filename)
+        if directory is None:
+            directory = config.rasodir
 
-        return self._rslist.loc[idents]
+        if files is None:
+            files = find_files(directory, pattern)
+            print(directory, pattern)
+
+        self.data = xr.open_mfdataset(files, concat_dim='sonde', preprocess=iadd_id, **kwargs)
+
+    def apply_function(self):
+        pass
+
+    def plot_map(self, filename=None, **kwargs):
+        from .plot import map
+        ax = map.points(self.lon, self.lat, title=self.name, **kwargs)
+        if filename is not None:
+            plt.savefig(filename, **kwargs)
+        return ax
+
+    def plot_neighboring_stations(self, ident, distance, filename=None, **kwargs):
+        import matplotlib.patches as mpatches
+        from .plot import map
+        neighbors = self.neighboring_stations(ident, distance * 2)
+        neighbors.name = 'distance'
+        idx = np.in1d(self.idents, neighbors.index.values)
+        stations = pd.DataFrame({'lon': self.lon[idx], 'lat': self.lat[idx]}, index=np.array(self.idents)[idx])
+        stations['distance'] = neighbors
+        stations = stations.sort_values('distance')
+        print(stations)
+        stations['color'] = 'b'
+        stations.loc[ident, 'color'] = 'r'
+        stations.loc[stations.distance > distance, 'color'] = 'w'
+        # todo add title with distance
+        ax = map.points(stations.lon, stations.lat, labels=stations.index.values, color=stations.color, **kwargs)
+        lon_radius = distance / (111.32 * np.cos(stations.lat[0] * np.pi / 180.))
+        lat_radius = distance / 110.574
+        print(lon_radius, lat_radius)
+        ax.add_patch(
+            mpatches.Ellipse(xy=[stations.lon[0], stations.lat[0]], width=lon_radius*2., height=lat_radius*2.,
+                            color='red', alpha=0.2,
+                            zorder=2, transform=ax.projection))
+
+        if filename is not None:
+            plt.savefig(filename, **kwargs)
+
+        return ax
+
+
+def _add_id(ds, ivars, invert=False):
+    if 'ident' in ds.attrs:
+        ds.coords['sonde'] = ds.attrs['ident']
+    elif 'station_id' in ds.attrs:
+        ds.coords['sonde'] = ds.attrs['station_id']
+    else:
+        ds.coords['sonde'] = ds.encoding['source'].split('/')[-2]
+
+    if ivars is not None:
+        if invert:
+            ds = ds[[i for i in list(ds.data_vars) if i not in ivars]]
+        else:
+            ds = ds[[i for i in list(ds.data_vars) if i in ivars]]
+    return ds

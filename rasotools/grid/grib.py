@@ -4,15 +4,31 @@ __all__ = ['read_eccodes', 'read_cfgrib']
 
 
 def read_cfgrib(filename, **kwargs):
-    import xarray
+    """ Read grib files using cfgrib
+
+    Args:
+        filename:
+        **kwargs:
+
+    Returns:
+
+    """
+    import xarray as xr
     try:
         import cfgrib
+        import cf2cdm
 
     except ImportError:
         print("requires eccodes library, and xarray")
         raise ImportError()
 
-    return cfgrib.open_dataset(filename, **kwargs)
+    kwargs['engine'] = 'cfgrib'
+    kwargs['backend_kwargs'] = kwargs.get('backend_kwargs', {})
+    if 'indexpath' not in kwargs['backend_kwargs']:
+        kwargs['backend_kwargs'].update({'indexpath':''})  # no indexfiles
+
+    data = xr.open_dataset(filename, **kwargs)
+    return cf2cdm.translate_coords(data, cf2cdm.CDS)
 
 
 def read_eccodes(filename, keys=None, **kwargs):

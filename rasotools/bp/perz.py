@@ -1,11 +1,11 @@
-import numpy as np
-import pandas as pd
-try:
-    from xData import DataArray
-    from xData.fun import date_selection, date_groupby
 
-except ImportError:
-    pass
+
+# try:
+#     from xData import DataArray
+#     from xData.fun import date_selection, date_groupby
+#
+# except ImportError:
+#     pass
 
 __all__ = ['percentile_count', 'percentiles']
 
@@ -22,6 +22,10 @@ def percentiles(data, percentiles=None, freq='M', **kwargs):
     Returns:
 
     """
+    import numpy as np
+    import pandas as pd
+    from xarray import DataArray
+
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
 
@@ -45,7 +49,7 @@ def percentiles(data, percentiles=None, freq='M', **kwargs):
         with np.errstate(invalid='ignore', over='ignore'):
             # time (freq) x other dimensions
             tmp = np.array([np.nanpercentile(data.values[ig], iq, axis=axis) for ig in grouped])  # > axis 0
-            tmp = np.where(icounts > 30., tmp, np.nan)  # filter for too little data
+            tmp = np.where(icounts > 30., tmp, np.nan)  # filter for too little dataset
             values.append(tmp)
 
     values = np.array(values)  # percentiles x time x other
@@ -97,13 +101,13 @@ def percentile_count(data, percentiles=None, freq='M', period=None):
     ref_q = np.apply_along_axis(_unique_percentiles, idate, data.values[itx], percentiles)
 
     # old
-    # nlev = data.values.shape[1]
-    # ref_q = np.array([_unique_percentiles(data.values[itx, ilev], percentiles) for ilev in range(nlev)])  #
+    # nlev = dataset.values.shape[1]
+    # ref_q = np.array([_unique_percentiles(dataset.values[itx, ilev], percentiles) for ilev in range(nlev)])  #
 
     grouped = date_groupby(dates, idate, len(data.order), freq=freq)
     dates = pd.DatetimeIndex(dates).to_period(freq).unique().to_timestamp().values
 
-    shapes = list(data.values.shape)  # original shape of data
+    shapes = list(data.values.shape)  # original shape of dataset
     oshapes = shapes[:]  # copy
     shapes.insert(idate+1, nperc)  # insert perc dim
     shapes[idate] = dates.size  # update date dim
@@ -117,10 +121,10 @@ def percentile_count(data, percentiles=None, freq='M', period=None):
         idy = idx[:]
         idy.insert(idate, slice(None))
         counts[idy] = np.array([_count(data.values[ig][idx], ref_q[idx]) for ig in grouped])
-        # counts[idx] = _count(data.values[idx], ref_q[idx])
+        # counts[idx] = _count(dataset.values[idx], ref_q[idx])
 
     # counts = np.array(counts).reshape(shapes)
-    # counts = np.array([[_count(data.values[ig][:, ilev], ref_q[ilev, :]) for ilev in range(nlev)] for ig in grouped])
+    # counts = np.array([[_count(dataset.values[ig][:, ilev], ref_q[ilev, :]) for ilev in range(nlev)] for ig in grouped])
     tmp = data.copy()
     dims = tmp.get_dimension_values()
     dims.pop(date_dim)

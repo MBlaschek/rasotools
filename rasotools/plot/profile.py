@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
+__all__ = ['var', 'winds', 'boxplot', 'bars']
 
-def var(data, dim='pres', ax=None, logy=False, yticklabels=None, showna=True, **kwargs):
+
+def var(data, dim='plev', ax=None, logy=False, yticklabels=None, showna=False, **kwargs):
     import numpy as np
     from xarray import DataArray
     from ._helpers import line, set_labels, get_info
@@ -25,6 +27,8 @@ def var(data, dim='pres', ax=None, logy=False, yticklabels=None, showna=True, **
         lev_units = 'hPa'
 
     itx = np.isfinite(values)
+
+    kwargs.update({'marker': kwargs.get('marker', 'o')})
 
     set_labels(kwargs, xlabel=get_info(data),
                title=get_info(data), ylabel=dim + ' [%s]' %lev_units)
@@ -51,7 +55,7 @@ def var(data, dim='pres', ax=None, logy=False, yticklabels=None, showna=True, **
     return ax
 
 
-def winds(data, u='u', v='v', dim='pres', barbs=True, ax=None, logy=False, yticklabels=None, showna=True, **kwargs):
+def winds(data, u='u', v='v', dim='plev', barbs=True, ax=None, logy=False, yticklabels=None, showna=True, **kwargs):
     import numpy as np
     from xarray import Dataset
     import matplotlib.pyplot as plt
@@ -122,7 +126,7 @@ def winds(data, u='u', v='v', dim='pres', barbs=True, ax=None, logy=False, ytick
     return ax
 
 
-def boxplot(data, dim='pres', ax=None, vline=None, yticklabels=None, logy=False, **kwargs):
+def boxplot(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False, **kwargs):
     import pandas as pd
     from xarray import DataArray
     import matplotlib.pyplot as plt
@@ -132,7 +136,7 @@ def boxplot(data, dim='pres', ax=None, vline=None, yticklabels=None, logy=False,
         raise ValueError('Requires a DataArray', type(data))
 
     if dim not in data.dims:
-        raise ValueError('Requires a datetime dimension', dim)
+        raise ValueError('Requires a level dimension', dim)
 
     if data.ndim != 2:
         raise ValueError('Too many/few dimensions', data.dims, data.shape)
@@ -176,8 +180,62 @@ def boxplot(data, dim='pres', ax=None, vline=None, yticklabels=None, logy=False,
         for label in ax.yaxis.get_ticklabels():
             if int(label.get_text()) not in yticklabels:
                 label.set_visible(False)
-    else:
-        for label in ax.yaxis.get_ticklabels()[::2]:
-            label.set_visible(False)
+    # else:
+    #     for label in ax.yaxis.get_ticklabels()[::2]:
+    #         label.set_visible(False)
     return ax
 
+
+def bars(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False, bar_kwargs={}, **kwargs):
+    import numpy as np
+    from xarray import DataArray
+    import matplotlib.pyplot as plt
+    from ._helpers import set_labels, get_info
+
+    if not isinstance(data, DataArray):
+        raise ValueError('Requires a DataArray', type(data))
+
+    if dim not in data.dims:
+        raise ValueError('Requires a level dimension', dim)
+
+    if data.ndim != 1:
+        raise ValueError('Too many/few dimensions', data.dims, data.shape)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    levels = data[dim].values.copy()
+    lev_units = data[dim].attrs.get('units', 'Pa')
+    if lev_units == 'Pa':
+        levels = levels.astype(float) / 100.
+        lev_units = 'hPa'
+
+    levels = levels.astype(int)
+    set_labels(kwargs, xlabel=get_info(data),
+               title=get_info(data), ylabel=dim + ' [%s]' % lev_units)
+
+    ax.barh(np.arange(1, levels.size+1), data.values, align='center', **bar_kwargs)
+    ax.set_yticklabels([str(i) for i in levels])
+    if logy:
+        ax.set_yscale('log')
+
+    if np.diff(levels)[0] > 0:
+        ax.invert_yaxis()
+
+    if vline is not None:
+        ax.axvline(x=vline, color='k', lw=1)
+
+    ax.grid(ls='--')
+    ax.set_title(kwargs.get('title'))
+    ax.set_ylabel(kwargs.get('ylabel'))
+    ax.set_xlabel(kwargs.get('xlabel'))
+    ax.set_xlim(*kwargs.get('xlim', (None, None)))
+
+    if yticklabels is not None:
+        for label in ax.yaxis.get_ticklabels():
+            if int(label.get_text()) not in yticklabels:
+                label.set_visible(False)
+    # else:
+    #     for label in ax.yaxis.get_ticklabels()[::2]:
+    #         label.set_visible(False)
+    return ax

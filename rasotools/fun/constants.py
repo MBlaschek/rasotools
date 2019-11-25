@@ -1,21 +1,14 @@
-# -*- coding: utf-8 -*-
-
-# TODO make this work with DataArray / Dataset Objects and modify their units
-
 class constant(object):
+    """ Add pint unit aware conversion to constants
+
+    """
     def __init__(self, value, units, desc):
         self.value = value
         self.units = units
         self.description = desc
-        # setattr(self, 'value', value)
-        # setattr(self, 'units', units)
-        # setattr(self, 'description', desc)
 
     def __repr__(self):
-        return str(self)
-
-    def __str__(self):
-        return "Constant: %14e [%s] %s" % (self.value, self.units, self.description)
+        return "%14e [%s] %s" % (self.value, self.units, self.description)
 
     def __call__(self):
         return self.value
@@ -76,39 +69,38 @@ class constant(object):
         return self.value + b
 
 
-# # Physical constants
-# Cpd= constant( 1005.7,  'J K-1 kg-1', 'Spec. heat dry air at const. press.') 
-# Cvd= constant(  718.,    'J K-1 kg-1', 'Spec. heat dry air at const. volume') 
-# Cpv= constant( 1870.,   'J K-1 kg-1', 'Specific heat of water vapour') 
-# Cl= constant( 4190.,   'J K-1 kg-1', 'Spec heat liquid water')
-# Rv= constant( 461.5,   'J K-1 kg-1', 'Gas constant for water vapour')
-# Rd= constant(       287.04,  'J K-1 kg-1', 'Gas constant dry air')
-# Lv= constant(       2.501e6,          ' ', 'Latent heat vaporisation')
-# Lf= constant(       3.336e5,          ' ', 'Lat heat of fusion')
-# rowl= constant(     1000.,       'kg m-3', 'Density of liquid water')
-# stebol= constant(   5.673e-8,          'W m-2 K-4 ', 'Stefan Boltzmann constant' )
-# epsilon= constant(  287.04/461.5,     '-', 'Rd/Rv')
-
-# # Orbital and planetary parameters
-# eccen= constant(           0.016715,       '-', 'Eccentricity of orbit')
-# obliq= constant(            23.4441,     'deg', 'Planetary obliquity')
-# prece= constant(              102.7,     'deg', 'Precession of vernal equinox')
-# orb_year= constant(            1995,       '-', 'Earth year for which orbital params computed')
-# lod= constant(               86400.,       's', 'Length of day' ) 
-# daysperyear= constant(       365.25,       '-', 'Number of days in a year' )
-# calday= constant(              80.5,    'days', 'Julian calendar day' )
-# r= constant(               6374000.,       'm', 'Planetary radius' ) 
-# g= constant(                   9.81,   'm/s2', 'Gravitational acceleration')
-# omega= constant(  2.*math.pi/86400., 'rad/s', 'Planetary rotation rate' ) 
-# radius= constant(                1.,      'AU', 'Mean orbital radius' )
-# scon= constant(               1367.,   'W/m2', 'Solar irradiance at mean orbital radius')
-
-
 #  --- ...  Math constants
 
-pi = constant(3.1415926535897931, "rad", ' pi')
-sqrt2 = constant(1.414214e+0, '', "        square root of 2")
-sqrt3 = constant(1.732051e+0, '', "        square root of 3")
+pi = constant(3.1415926535897931, "rad", 'pi')
+sqrt2 = constant(1.414214e+0, '', "square root of 2")
+sqrt3 = constant(1.732051e+0, '', "square root of 3")
+
+# Physical constants
+Cpd = constant(1005.7, 'J K-1 kg-1', 'Spec. heat dry air at const. press.')
+Cvd = constant(718., 'J K-1 kg-1', 'Spec. heat dry air at const. volume')
+Cpv = constant(1870., 'J K-1 kg-1', 'Specific heat of water vapour')
+Cl = constant(4190., 'J K-1 kg-1', 'Spec heat liquid water')
+Rv = constant(461.5, 'J K-1 kg-1', 'Gas constant for water vapour')
+Rd = constant(287.04, 'J K-1 kg-1', 'Gas constant dry air')
+Lv = constant(2.501e6, ' ', 'Latent heat vaporisation')
+Lf = constant(3.336e5, ' ', 'Lat heat of fusion')
+rowl = constant(1000., 'kg m-3', 'Density of liquid water')
+stebol = constant(5.673e-8, 'W m-2 K-4 ', 'Stefan Boltzmann constant')
+epsilon = constant(287.04 / 461.5, '-', 'Rd/Rv')
+
+# Orbital and planetary parameters
+eccen = constant(0.016715, '-', 'Eccentricity of orbit')
+obliq = constant(23.4441, 'deg', 'Planetary obliquity')
+prece = constant(102.7, 'deg', 'Precession of vernal equinox')
+orb_year = constant(1995, '-', 'Earth year for which orbital params computed')
+lod = constant(86400., 's', 'Length of day')
+daysperyear = constant(365.25, '-', 'Number of days in a year')
+calday = constant(80.5, 'days', 'Julian calendar day')
+r = constant(6374000., 'm', 'Planetary radius')
+g = constant(9.81, 'm/s2', 'Gravitational acceleration')
+omega = constant(2. * pi / 86400., 'rad/s', 'Planetary rotation rate')
+radius = constant(1., 'AU', 'Mean orbital radius')
+scon = constant(1367., 'W/m2', 'Solar irradiance at mean orbital radius')
 
 #  --- ...  Geophysics/Astronomy constants
 
@@ -116,8 +108,8 @@ rerth = constant(6.3712e+6, 'm', 'radius of earth')
 g = constant(9.80665e+0, 'm/s2', 'gravity           ')
 omega = constant(7.2921e-5, '1/s', 'ang vel of earth  ')
 p0 = constant(1.01325e5, 'pa', 'std atms pressure ')
-# solr  =constant(1.36822e+3  ,'W/m2'  ,'solar constant    ')# -aer(2001)
-# solr  =constant(1.3660e+3  ,'W/m2'     ,'solar constant    ') #(W/m2)-liu(2002)
+# solr  =_constant(1.36822e+3  ,'W/m2'  ,'solar constant    ')# -aer(2001)
+# solr  =_constant(1.3660e+3  ,'W/m2'     ,'solar constant    ') #(W/m2)-liu(2002)
 solr = constant(1.36742732e+3, 'W/m2', 'solar constant    ')  # (W/m2)-gfdl(1989) - OPR as of Jan 2006
 
 #  --- ...  Thermodynamics constants
@@ -152,24 +144,18 @@ xponb = constant(-1 * dldt / rv + hvap / (rv * ttp), '', '-(cvap-cliq)/rv + hvap
 
 #  --- ...  Other Physics/Chemistry constants
 
-plnk = constant(6.6260693e-34, 'J/s', 'planck constatn ')  # )  (J/s) -nist(2002)
+plnk = constant(6.6260693e-34, 'J/s', 'planck constant')  # )  (J/s) -nist(2002)
 sbc = constant(5.6730e-8, 'W/m2/K4', 'stefan-boltzmann  ')  # (W/m2/K4)
-# sbc   =constant(5.670400e-8    ,'stefan-boltzmann    (W/m2/K4) -nist(2002)
-# avgd  =constant(6.02214e23     ,'avogadro constant   (1/mol) -aer
+# sbc   =_constant(5.670400e-8    ,'stefan-boltzmann    (W/m2/K4) -nist(2002)
+# avgd  =_constant(6.02214e23     ,'avogadro constant   (1/mol) -aer
 avgd = constant(6.0221415e23, '1/mol', 'avogadro constant   ')  # -nist(2002)
 gasv = constant(22413.996e-6, 'm3/mol', 'vol of ideal gas at 273.15k, 101.325kpa ')  # (m3/mol) -nist(2002)
-# amd   =constant(28.970    ,'g/mol'     ,'molecular wght of dry air ') #(g/mol)
+# amd   =_constant(28.970    ,'g/mol'     ,'molecular wght of dry air ') #(g/mol)
 amd = constant(28.9644, 'g/mol', 'molecular wght of dry air ')  # (g/mol)
 amw = constant(18.0154, 'g/mol', 'molecular wght of water vapor ')  # (g/mol)
 amo3 = constant(47.9982, 'g/mol', 'molecular wght of o3 ')  # (g/mol)
-# amo3  =constant(48.0      ,'g/mol '    ,'molecular wght of o3  ') #(g/mol)
+# amo3  =_constant(48.0      ,'g/mol '    ,'molecular wght of o3  ') #(g/mol)
 amco2 = constant(44.011, 'g/mol', 'molecular wght of co2 ')  # (g/mol)
 amo2 = constant(31.9999, 'g/mol', 'molecular wght of o2  ')  # (g/mol)
 amch4 = constant(16.043, 'g/mol', 'molecular wght of ch4 ')  # (g/mol)
 amn2o = constant(44.013, 'g/mol', 'molecular wght of n2o ')  # (g/mol)
-
-
-def show():
-    from . import constants
-    print("Constants in Module: ")
-    print("\n".join(["%8s : %s" % (str(item), str(eval(item))) for item in dir(constants) if not item.startswith("__") and (not item in ['show', 'constant', 'math'])]))

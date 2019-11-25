@@ -5,7 +5,7 @@ def vrange(x, axis=0):
     """ Calculate min and max
 
     Args:
-        x (ndarray): input data
+        x (ndarray): input dataset
         axis (int): axis
     """
     import numpy as np
@@ -16,7 +16,7 @@ def nanrange(x, axis=0):
     """ Calculate min and max removing NAN
 
     Args:
-        x (ndarray): input data
+        x (ndarray): input dataset
         axis (int): axis
 
     Returns:
@@ -30,7 +30,7 @@ def nancount(x, axis=0, keepdims=False):
     """
 
     Args:
-        x (ndarray): input data
+        x (ndarray): input dataset
         axis (int): axis
         keepdims (bool): keep dimensions
     """
@@ -38,34 +38,34 @@ def nancount(x, axis=0, keepdims=False):
     return np.sum(np.isfinite(x), axis=axis, keepdims=keepdims)
 
 
-def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, func=None, flip=False, fargs=()):
+def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, ffunc=None, flip=False, fargs=(), **kwargs):
     """ Nan omitting function (numpy)
 
     Args:
-        data (np.ndarray): data including NaN
+        data (np.ndarray): dataset including NaN
         n (int): minimum sample size
         axis (int): datetime axis
         nmax (int): maximum sample size
         borders (int): border sample to ignore
-        func (callable): function to call
-        flip (bool): reverse data before applying the function
+        ffunc (callable): function to call
+        flip (bool): reverse dataset before applying the function
         args (tuple): function arguments
 
     Returns:
         np.ndarray : func of values at axis, with sample size, borders and maximum
     """
     import numpy as np
-    if func is None:
-        func = np.nanmean
-    return np.apply_along_axis(sample, axis, data, n, nmax, func, borders=borders, flip=flip, fargs=fargs)
+    if ffunc is None:
+        ffunc = np.nanmean
+    return np.apply_along_axis(sample, axis, data, n, nmax, ffunc, borders=borders, flip=flip, fargs=fargs)
 
 
-def sample(values, nmin, nmax, func, borders=0, flip=False, fargs=()):
+def sample(values, nmin, nmax, func, borders=0, flip=False, fargs=(), **kwargs):
     # variable output, One value or array
     # todo make a numba version of this function
     # make everything loops and stuff
     # find nan
-    # find max, min number of data and apply function
+    # find max, min number of dataset and apply function
     import numpy as np
     itx = np.isfinite(values)
     n = itx.sum()
@@ -109,7 +109,7 @@ def fuzzy_all(x, axis=0, thres=2):
     """ fuzzy all true or not
 
     Args:
-        x (ndarray): input data (bool)
+        x (ndarray): input dataset (bool)
         axis (int): axis
         thres (int): threshold for axis sum
 
@@ -174,7 +174,7 @@ def distance(lon, lat, ilon, ilat, miles=False):
 
 
 def linear_trend(y, x, method='polyfit', alpha=None, nmin=3, fit=False, axis=0, **kwargs):
-    """ calculate linear trend from data
+    """ calculate linear trend from dataset
 
     Args:
         y (ndarray): values
@@ -200,10 +200,13 @@ def linear_trend(y, x, method='polyfit', alpha=None, nmin=3, fit=False, axis=0, 
 
     if method == 'polyfit':
         params = _trend_polyfit_wrapper(y, x, nmin=nmin)
+
     elif method == 'theil_sen':
         params = _trend_theilslopes_wrapper(y, x, nmin=nmin, alpha=alpha)
+
     elif method == 'linregress':
         params = _trend_linregress_wrapper(y, x, nmin=nmin)
+
     else:
         params = _trend_regression_wrapper(y, x, nmin=nmin)
 
@@ -292,7 +295,7 @@ def mann_kendall_test(x, alpha=0.05):
     to quantify these findings.
 
     Input:
-        x:   a vector of data
+        x:   a vector of dataset
         alpha: significance level (0.05 default)
 
     Output:
@@ -309,24 +312,28 @@ def mann_kendall_test(x, alpha=0.05):
     """
     import numpy as np
     from scipy.stats import norm
+    from .fnumba import mann_kenddall_test_calculate_s
 
     n = len(x)
 
     # calculate S
-    s = 0
-    for k in range(n - 1):
-        s += sum(np.sign(x[k + 1:] - x[k]))
-        # for j in range(k+1, n):
-        #    s += np.sign(x[j] - x[k])
+    if False:
+        s = 0
+        for k in range(n - 1):
+            s += np.nansum(np.sign(x[k + 1:] - x[k]))
+            # for j in range(k+1, n):
+            #    s += np.sign(x[j] - x[k])
+    else:
+        s = mann_kenddall_test_calculate_s(x)
 
-    # calculate the unique data
+    # calculate the unique dataset
     unique_x, tp = np.unique(x, return_counts=True)
     g = len(unique_x)
 
     # calculate the var(s)
     if n == g:  # there is no tie
         var_s = (n * (n - 1) * (2 * n + 5)) / 18
-    else:  # there are some ties in data
+    else:  # there are some ties in dataset
         # tp = np.zeros(unique_x.shape)
         # for i in range(len(unique_x)):
         #     tp[i] = sum(x == unique_x[i])
@@ -367,7 +374,7 @@ def num_samples_trend_test(beta, delta, std_dev, alpha=0.05, n=4, num_iter=1000,
     probabilities that the MK test will make decision errors. If a non-linear
     trend is actually present, then the value of n computed by VSP is only an
     approximation to the adjustments n. If non-detects are expected in the
-    resulting data, then the value of n computed by VSP is only an
+    resulting dataset, then the value of n computed by VSP is only an
     approximation to the adjustments n, and this approximation will tend to be less
     accurate as the number of non-detects increases.
 
@@ -477,11 +484,13 @@ def num_samples_trend_test(beta, delta, std_dev, alpha=0.05, n=4, num_iter=1000,
                 raise ValueError("Number of samples = 0. This should not happen.")
 
 
-def sample_wrapper(data, func, nmin=130, axis=0, **kwargs):
+def sample_wrapper(data, ffunc=None, nmin=130, axis=0, **kwargs):
     import numpy as np
+    if ffunc is None:
+        ffunc = np.nanmean
     nn = np.isfinite(data).sum(axis=axis)
     nn = np.where(nn < nmin, np.nan, 1.)
-    return func(data, axis=axis, **kwargs) * nn
+    return ffunc(data, axis=axis, **kwargs) * nn
 
 
 def covariance(x, y, axis=0):
@@ -502,7 +511,7 @@ def spearman_correlation(x, y, axis=0):
     return pearson_correlation(x_ranks, y_ranks, axis=axis)
 
 
-def fix_datetime(itime, span=6):
+def fix_datetime(itime, span=6, debug=False):
     """ Fix datetime to standard datetime with hour precision
 
     Args:
@@ -513,14 +522,88 @@ def fix_datetime(itime, span=6):
         datetime : standard datetime
     """
     import pandas as pd
-    itime = pd.Timestamp(itime)
+    itime = pd.Timestamp(itime)   # (time: 34%)
+    # span=6 -> 0, 12
+    # [18, 6[ , [6, 18[
+    # span=3 -> 0, 6, 12, 18
+    # [21, 3[, [3,9[, [9,15[, [15,21[
     for ihour in range(0, 24, span * 2):
+        # 0 - 6 + 24 = 18
         lower = (ihour - span + 24) % 24
+        # 0 + 6 + 24 = 6
         upper = (ihour + span + 24) % 24
-        if itime.hour >= lower or itime.hour < upper:
-            rx = itime.replace(hour=ihour, minute=0, second=0, microsecond=0)
-            if itime.hour >= (24 - span):
-                rx = rx + pd.DateOffset(days=1)
-            return rx.to_datetime64()
+        # 18 >= 18 or 18 < 6  > 00
+        # 0 >= 18 or 0 < 6    > 00
+        if debug:
+            print("%d [%d] %d >= %d < %d" %(ihour, span, lower, itime.hour, upper))
+
+        if (ihour - span) < 0:
+            if itime.hour >= lower or itime.hour < upper:
+                rx = itime.replace(hour=ihour, minute=0, second=0, microsecond=0)
+                if itime.hour >= (24 - span):
+                    rx = rx + pd.DateOffset(days=1)
+                return rx.to_datetime64()
         else:
-            pass
+            if lower <= itime.hour < upper:
+                rx = itime.replace(hour=ihour, minute=0, second=0, microsecond=0)
+                if itime.hour >= (24 - span):
+                    rx = rx + pd.DateOffset(days=1)
+                return rx.to_datetime64()
+
+#
+# def fix_datetime2(itime, span=6, debug=False):
+#     """ Fix datetime to standard datetime with hour precision
+#
+#     Args:
+#         itime (datetime): Datetime
+#         span (int): allowed difference to standard datetime (0,6,12,18)
+#
+#     Returns:
+#         datetime : standard datetime
+#     """
+#     jhour = itime.astype('<M8[s]').astype(int)
+#     # span=6 -> 0, 12
+#     # [18, 6[ , [6, 18[
+#     # span=3 -> 0, 6, 12, 18
+#     # [21, 3[, [3,9[, [9,15[, [15,21[
+#     for ihour in range(0, 24, span * 2):
+#         # 0 - 6 + 24 = 18
+#         lower = (ihour - span + 24) % 24
+#         # 0 + 6 + 24 = 6
+#         upper = (ihour + span + 24) % 24
+#         # 18 >= 18 or 18 < 6  > 00
+#         # 0 >= 18 or 0 < 6    > 00
+#         if debug:
+#             print("%d [%d] %d >= %d < %d" %(ihour, span, lower, itime.hour, upper))
+#
+#         if (ihour - span) < 0:
+#             if itime.hour >= lower or itime.hour < upper:
+#                 rx = itime.replace(hour=ihour, minute=0, second=0, microsecond=0)
+#                 if itime.hour >= (24 - span):
+#                     rx = rx + pd.DateOffset(days=1)
+#                 return rx.to_datetime64()
+#         else:
+#             if lower <= itime.hour < upper:
+#                 rx = itime.replace(hour=ihour, minute=0, second=0, microsecond=0)
+#                 if itime.hour >= (24 - span):
+#                     rx = rx + pd.DateOffset(days=1)
+#                 return rx.to_datetime64()
+
+
+# slower by 20 µs
+# def fix_datetime_fast(itime, span=6):
+#     import numpy as np
+#     import pandas as pd
+#     itime = pd.Timestamp(itime)
+#     times = np.arange(0, 24, span * 2)
+#     i = np.argmin(np.abs(times - itime.hour))
+#     if times[i] > itime.hour:
+#         # forward
+#         rx = itime.replace(hour=times[i], minute=0, second=0, microsecond=0)
+#         if itime.hour >= (24 - span):
+#             rx = rx + pd.DateOffset(days=1)
+#         return rx.to_datetime64()
+#     else:
+#         # backwards
+#         rx = itime.replace(hour=times[i], minute=0, second=0, microsecond=0)
+#         return rx.to_datetime64()

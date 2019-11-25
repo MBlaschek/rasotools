@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
-from ._helpers import *
-from ._calc import *
-from ._xarray import *
+from .help import *
+from . import fnumba
+from . import cal
+from .xarray import *
 from . import interp
-from ._ops import *
-from ._info import view as store_view
-
-"""
-Module to combine general functions not specific to any Array
-"""
+from . import xarray
+from . import netcdf
+from . import help
+from . import constants
+from . import station
+from .Bunch import Bunch

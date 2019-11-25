@@ -1,13 +1,26 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-from numba import njit, prange
+from numba import njit
 
 from ..fun import message
 
-__all__ = ['detector', 'test']
+__all__ = ['detector', 'test', 'detector_ensemble']
 
 
 def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwargs):
+    """ Detect breakpoints using multiple threshold values
+
+    Args:
+        data:
+        axis:
+        ndist:
+        nthres:
+        nlevels:
+        **kwargs:
+
+    Returns:
+
+    """
     if ndist is None and nthres is None and nlevels is None:
         raise ValueError("requires either ndist, nthres or nlevels")
 
@@ -16,7 +29,7 @@ def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwa
     if ndist is not None:
         if isinstance(ndist, int):
             ndist = np.linspace(180, 1460, ndist)
-        # n = len(ndist)
+        # todo use prange
         for i in ndist:
             tmp += detector(data, axis=axis, dist=i, **kwargs)
 
@@ -38,7 +51,22 @@ def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwa
     return tmp #2*(tmp / np.max(tmp))  # (1)
 
 
-def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, **kwargs):
+def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, use_first=False, **kwargs):
+    """ Detect breakpoints given some parameters
+
+    Args:
+        data (np.ndarray): snht test data
+        axis (int): datetime dimension
+        dist (int): minimum distance between breakpoints
+        thres (int): threshold for significant levels
+        min_levels (int): minimum of significant levels
+        use_slopes (bool): Use first derivative for detection
+        use_first (bool): Use the beginning of a peak, rather than the peak
+        **kwargs:
+
+    Returns:
+        np.ndarray : breakpoint data
+    """
     if not isinstance(data, np.ndarray):
         raise ValueError("requires an array: %s" % str(type(data)))
 
@@ -50,12 +78,22 @@ def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, *
         # combine #-significant and sum of test
         jbreak = np.where(jbreak >= min_levels, 1, 0)
         ibreak = jbreak * np.sum(data, axis=1 if axis == 0 else 0)
+
     else:
-        ibreak = data * breaks
+        ibreak = data * breaks   # truncate at threshold
 
     # find local maxima (within distance)
     if use_slopes:
         imax = local_maxima(np.diff(ibreak), dist=dist)
+
+    elif use_first:
+        # find the beginning of breakpoint
+        imax = local_maxima(ibreak, dist=dist)  # Maximum
+        ifirst = []
+        for i in imax:
+            ifirst += [i + np.argmin(ibreak[i:i+dist])]
+        imax = ifirst
+
     else:
         imax = local_maxima(ibreak, dist=dist)
 
@@ -63,7 +101,7 @@ def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, *
         imax = np.asarray(imax)
         message("Breaks: " + str(imax), **kwargs)
         for i in imax:
-            breaks[idx2shp(i, axis, data.shape)] *= 2  # maximum Breakpoint
+            breaks[idx2shp(i, axis, data.shape)] += 2  # maximum Breakpoint
 
     return breaks
 
@@ -75,7 +113,7 @@ def percentile_detector(data, reference, freq, min_levels, percentiles=None, wei
 
     # subset to
     # calc. percentiles from reference
-    # Apply percentiles to full data and count occurances /
+    # Apply percentiles to full dataset and count occurances /
     # when doe the occurances change?
     # nanpercentile ->
 
@@ -135,7 +173,7 @@ def numba_snhtmov(t, tsa, snhtparas, count, tmean, tsquare):
     tsquare[0] = 0.
     for j in range(ni):
         count[j] = 0
-        # compare if nan ?
+        # compare_lists if nan ?
         if t[j] == t[j]:
             if good > 0:
                 tmean[good] = tmean[good - 1] + t[j]

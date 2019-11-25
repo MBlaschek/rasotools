@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-from . import constants as con
+from ..fun.constants import rd,g
 
 
 ################################################################################
@@ -18,8 +18,8 @@ def pressure_to_height(x,
         func = np.vectorize(pressure_to_height)
         return func(x, p0=p0, t0=t0)
 
-    g = con.g()  # m/s2
-    R = con.rd()  # J/kg/K
+    g = g()  # m/s2
+    R = rd()  # J/kg/K
     dt = 0.0065  # K/m
     a = g / (R * dt)
 
@@ -35,8 +35,8 @@ def height_to_pressure(x,
         func = np.vectorize(height_to_pressure)
         return func(x, p0=p0, t0=t0)
 
-    g = con.g()  # m/s2
-    R = con.rd()  # J/kg/K
+    g = g()  # m/s2
+    R = rd()  # J/kg/K
     dt = 0.0065  # K/m
     a = g / (R * dt)
 

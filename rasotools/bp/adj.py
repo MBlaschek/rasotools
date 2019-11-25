@@ -2,7 +2,8 @@
 import numpy as np
 
 from . import dep
-from ..fun import message, nancount, check_kw, update_kw
+from ..fun import message, check_kw
+from ..fun.cal import nancount
 
 __all__ = ['mean', 'percentile', 'percentile_reference']
 
@@ -70,7 +71,7 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
                                      borders=borders, ratio=ratio, **kwargs)
         #
         # Border zone (- borders, + borders)
-        #
+        # todo: some error? values do not match
         if borders > 0:
             left = slice(ib - borders, ib)
             right = slice(ib, ib + borders)
@@ -89,7 +90,7 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
         if check_kw('verbose', value=2, **kwargs):
             sdata = stats(data, iref, isample, axis=axis, a=before)
             sdata = np.array_str(sdata, precision=2, suppress_small=True)
-            message(sdata, **update_kw('level', 1, **kwargs))
+            message(sdata, **kwargs)
     return data
 
 
@@ -112,17 +113,23 @@ def percentile(data, breaks, axis=0, percentilen=None, sample_size=130, borders=
     Returns:
         array : adjusted data
     """
-
     if not isinstance(data, np.ndarray):
         raise ValueError("requires a numpy array")
+
     if not isinstance(breaks, (list, np.ndarray)):
         raise ValueError('requires a numpy array of list')
 
     data = data.copy()
+    #
+    # Percentiles
+    #
     if percentilen is None:
         percentilen = np.arange(0, 101, 10)
 
     nq = len(percentilen)
+    #
+    # Sample size per Percentile
+    #
     sample_size = sample_size // nq
     if sample_size < 3:
         sample_size = 3
@@ -159,7 +166,7 @@ def percentile(data, breaks, axis=0, percentilen=None, sample_size=130, borders=
         if check_kw('verbose', value=2, **kwargs):
             sdata = stats(data, iref, isample, axis=axis, a=before)
             sdata = np.array_str(sdata, precision=2, suppress_small=True)
-            message(sdata, **update_kw('level', 1, **kwargs))
+            message(sdata, **kwargs)
 
     return data
 
@@ -296,7 +303,7 @@ def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_
             sdata = np.array_str(sdata, precision=2, suppress_small=True)
             if i == (nb - 2):
                 sdata = '[    i     #S          B      dB       S      dS       R   #R   ]\n' + sdata
-            message(sdata, **update_kw('level', 1, **kwargs))
+            message(sdata, **kwargs)
 
     return xdata
 

@@ -2,7 +2,7 @@
 
 
 __all__ = ['anomaly', 'trend', 'trend_per_month', 'trend_mon_percentile',
-           'day_night_departures', 'correlate', 'covariance']
+           'day_night_departures', 'correlate', 'covariance', 'resample_nanmean']
 #
 # global Variables
 #
@@ -172,7 +172,8 @@ def trend(data, dim='time', use_anomalies=True, period=None, min_periods=3, meth
 
         out = {}
         for ivar in data.data_vars:
-            out[ivar] = trend(data[ivar], dim=dim, use_anomalies=False, method=method, only_slopes=True)
+            out[ivar] = trend(data[ivar], dim=dim, use_anomalies=False, method=method, keep_attrs=keep_attrs,
+                              only_slopes=True)
 
         out = Dataset(out)
         out.attrs.update(data.attrs.copy())
@@ -269,7 +270,7 @@ def trend_mon_percentile(data, dim='time', percentile=None, period=None,
         Dataset : slope_perc_XX  for each percentile
     """
     import numpy as np
-    from xarray import DataArray, Dataset
+    from xarray import DataArray
     from .. import fun as ff
     if not isinstance(data, DataArray):
         raise ValueError("Requires a DataArray class object")
@@ -292,7 +293,7 @@ def trend_mon_percentile(data, dim='time', percentile=None, period=None,
                                             axis=axis,
                                             ffunc=np.nanpercentile,
                                             nmin=min_per_month,
-                                           q=percentile)
+                                            q=percentile)
     #
     # Call trend with
     #
@@ -353,7 +354,7 @@ def correlate(x, y, dim='time', period=None, method='spearman', **kwargs):
     Returns:
         DataArray : correlation coefficients
     """
-    from xarray import DataArray, align, apply_ufunc
+    from xarray import DataArray, align
     from .. import fun as ff
 
     if not isinstance(x, DataArray):
@@ -373,30 +374,32 @@ def correlate(x, y, dim='time', period=None, method='spearman', **kwargs):
     x, y = align(x, y, join='left')
     axis = x.dims.index(dim)
 
-    def sp_corr(xx, yy, d, a):
-        jdims = list(xx.dims)
-        jdims.remove(d)
-        return apply_ufunc(ff.cal.spearman_correlation, xx, yy,
-                           input_core_dims=[xx.dims, yy.dims],
-                           output_core_dims=[jdims],
-                           output_dtypes=[float],
-                           kwargs={'axis': a},
-                           keep_attrs=True)
-
-    def ps_corr(xx, yy, d, a):
-        jdims = list(xx.dims)
-        jdims.remove(d)
-        return apply_ufunc(ff.cal.pearson_correlation, xx, yy,
-                           input_core_dims=[xx.dims, yy.dims],
-                           output_core_dims=[jdims],
-                           output_dtypes=[float],
-                           kwargs={'axis': a},
-                           keep_attrs=True)
+    # def sp_corr(xx, yy, d, a):
+    #     jdims = list(xx.dims)
+    #     jdims.remove(d)
+    #     return apply_ufunc(ff.cal.spearman_correlation, xx, yy,
+    #                        input_core_dims=[xx.dims, yy.dims],
+    #                        output_core_dims=[jdims],
+    #                        output_dtypes=[float],
+    #                        kwargs={'axis': a},
+    #                        keep_attrs=True)
+    #
+    # def ps_corr(xx, yy, d, a):
+    #     jdims = list(xx.dims)
+    #     jdims.remove(d)
+    #     return apply_ufunc(ff.cal.pearson_correlation, xx, yy,
+    #                        input_core_dims=[xx.dims, yy.dims],
+    #                        output_core_dims=[jdims],
+    #                        output_dtypes=[float],
+    #                        kwargs={'axis': a},
+    #                        keep_attrs=True)
 
     if method == 'spearman':
-        corr = sp_corr(x, y, dim, axis)
+        corr = ff.xarray.xarray_function_wrapper(x, wfunc=ff.cal.spearman_correlation, dim=dim, y=y, axis=axis)
+        # corr = sp_corr(x, y, dim, axis)
     else:
-        corr = ps_corr(x, y, dim, axis)
+        corr = ff.xarray.xarray_function_wrapper(x, wfunc=ff.cal.pearson_correlation, dim=dim, y=y, axis=axis)
+        # corr = ps_corr(x, y, dim, axis)
 
     ff.xarray.set_attrs(corr, 'standard_name', add='_corr', default='correlation')
     corr.attrs['units'] = '1'
@@ -416,7 +419,7 @@ def covariance(x, y, dim='time', period=None):
     Returns:
 
     """
-    from xarray import DataArray, align, apply_ufunc
+    from xarray import DataArray, align
     from .. import fun as ff
 
     if not isinstance(x, DataArray):
@@ -433,17 +436,18 @@ def covariance(x, y, dim='time', period=None):
     x, y = align(x, y, join='left')
     axis = x.dims.index(dim)
 
-    def nancov(xx, yy, d, a):
-        jdims = list(xx.dims)
-        jdims.remove(d)
-        return apply_ufunc(ff.cal.covariance, xx, yy,
-                           input_core_dims=[xx.dims, yy.dims],
-                           output_core_dims=[jdims],
-                           output_dtypes=[float],
-                           kwargs={'axis': a},
-                           keep_attrs=True)
-
-    corr = nancov(x, y, dim, axis)
+    # def nancov(xx, yy, d, a):
+    #     jdims = list(xx.dims)
+    #     jdims.remove(d)
+    #     return apply_ufunc(ff.cal.covariance, xx, yy,
+    #                        input_core_dims=[xx.dims, yy.dims],
+    #                        output_core_dims=[jdims],
+    #                        output_dtypes=[float],
+    #                        kwargs={'axis': a},
+    #                        keep_attrs=True)
+    #
+    # corr = nancov(x, y, dim, axis)
+    corr = ff.xarray.xarray_function_wrapper(x, wfunc=ff.cal.covariance, dim=dim, y=y, axis=axis)
     ff.xarray.set_attrs(corr, 'standard_name', add='_cov', default='covariance')
     ff.xarray.set_attrs(corr, 'units', add='2', default='2')
     ff.xarray.set_attrs(corr, 'cell_method', set='covariance with %s' % y.name)
@@ -489,6 +493,48 @@ def day_night_departures(data, dim='time', day=12, night=0, **kwargs):
             set_attrs(data[iname], 'standard_name', add='_day_night_dep', default='day_night_dep')
             data[iname].attrs.update({'cell_method': 'noon - night', 'info': 'Day(%dZ)-Night(%dZ)' % (day, night)})
     return data
+
+
+def statistics(x, f='rmse', y=None, dim='time', period=None, **kwargs):
+    from xarray import DataArray
+    from .. import fun as ff
+
+    if not isinstance(x, DataArray):
+        raise ValueError("Requires a DataArray, not", type(x))
+
+    if isinstance(f, str):
+        try:
+            f = getattr(ff.cal, f)
+        except Exception as e:
+            print('Function', f, 'not found in', ff.cal)
+            raise e
+
+    if period is not None:
+        x = x.sel(**{dim: period})
+        if y is not None:
+            y = y.sel(**{dim: period})
+
+    return ff.xarray.xarray_function_wrapper(x, wfunc=f, dim=dim, y=y, axis=x.dims.index(dim))
+
+
+def resample_nanmean(data, dim='time', resample='M', nmin=15, **kwargs):
+    """ Resample Dataset and apply a minimum for resampling mean
+
+    Args:
+        data (DataArray, Dataset): Input fields
+        dim (str): datetime dimension
+        resample (str): upsampling frequency
+        nmin (int): minimum of samples per frequency
+        **kwargs:
+
+    Returns:
+        DataArray, Dataset : means on freq
+    """
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        dd = data.resample(**{dim: resample}).count(dim)
+        return data.resample(**{dim: resample}).mean(dim).where(dd > nmin)
 
 #
 # def fill_missing_hours(data, dim='time', hour='hour', times=(0, 12), **kwargs):

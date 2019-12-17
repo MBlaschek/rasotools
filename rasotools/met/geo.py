@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-from ..fun.constants import rd,g
+
+from ..fun.constants import rd, g
 
 
 ################################################################################
@@ -18,14 +19,12 @@ def pressure_to_height(x,
         func = np.vectorize(pressure_to_height)
         return func(x, p0=p0, t0=t0)
 
-    g = g()  # m/s2
-    R = rd()  # J/kg/K
     dt = 0.0065  # K/m
-    a = g / (R * dt)
+    a = g / (rd * dt)
 
     # p to h
     h = (t0 / dt) * (1 - (x / p0) ** (1 / a))
-    return np.where(x < 226.32, (11000 + np.log(x / 226.32) * (R * 216.65) / -g), h)
+    return np.where(x < 226.32, (11000 + np.log(x / 226.32) * (rd * 216.65) / -g), h)
 
 
 def height_to_pressure(x,
@@ -35,11 +34,8 @@ def height_to_pressure(x,
         func = np.vectorize(height_to_pressure)
         return func(x, p0=p0, t0=t0)
 
-    g = g()  # m/s2
-    R = rd()  # J/kg/K
     dt = 0.0065  # K/m
-    a = g / (R * dt)
-
+    a = g / (rd * dt)
     # h to p
     p = p0 * (1 - (dt * x / t0)) ** a
-    return np.where(x > 11000, (226.32 * np.exp((-g * (x - 11000)) / (R * 216.65))), p)
+    return np.where(x > 11000, (226.32 * np.exp((-g * (x - 11000)) / (rd * 216.65))), p)

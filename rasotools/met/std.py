@@ -3,13 +3,14 @@
 __all__ = ['to_hours', 'reindex', 'sel_hours', 'align_datetime', 'datetime_range']
 
 
-def sel_hours(data, dim='time', times=(0, 12), **kwargs):
+def sel_hours(data, dim='time', times=(0, 12), minutes=None, **kwargs):
     """ Select only given hours
 
     Args:
         data (xarray.DataArray): Input DataArray
         dim (str): datetime dimension
         times (tuple, list): hours to consider
+        minutes (int): select only these minutes
 
     Returns:
         xarray.DataArray : DataArray only at selected hours
@@ -27,6 +28,8 @@ def sel_hours(data, dim='time', times=(0, 12), **kwargs):
     #
     # indexing with an array
     #
+    if minutes is not None:
+        return data.sel(**{dim: (data[dim].dt.hour.isin(times) & (data[dim].dt.minute == minutes))})
     return data.sel(**{dim: data[dim].dt.hour.isin(times)})  # copy
 
 
@@ -54,7 +57,7 @@ def reindex(data, dim='time', times=(0, 12), freq='12h', span=6, **kwargs):
     return data.reindex({dim: alldates})
 
 
-def to_hours(data, dim='time', times=(0, 12), as_dataset=False, hour='hour', **kwargs):
+def to_hours(data, dim='time', times=(0, 12), as_dataset=False, hour='hour', minutes=None, **kwargs):
     """ Split Array into separate Arrays by time
 
     Args:
@@ -63,6 +66,7 @@ def to_hours(data, dim='time', times=(0, 12), as_dataset=False, hour='hour', **k
         times (tuple, list): std hours
         as_dataset (bool): return hour dim as variables
         hour (str): name of hour dimension
+        minutes (int): use only these minutes
 
     Returns:
         xarray.DataArray : datetime dimension split to days and hours
@@ -76,9 +80,15 @@ def to_hours(data, dim='time', times=(0, 12), as_dataset=False, hour='hour', **k
 
     if dim not in data.dims:
         raise ValueError('Requires a datetime dimension', dim)
+    #
+    # check if duplicated times will occur because of minutes
+    if data[dim].to_index().to_period('h').duplicated().any():
+        if minutes is None:
+            minutes = 0
+            ff.message("Warning minutes=0, datetime duplicates", **ff.leveldown(**kwargs))
 
-    data = sel_hours(data, dim=dim, times=times, **ff.levelup(**kwargs))  # selection (copy)
-
+    data = sel_hours(data, dim=dim, times=times, minutes=minutes, **ff.levelup(**kwargs))  # selection (copy)
+    #
     data = dict(data.groupby(dim + '.hour'))
     for ikey in data.keys():
         if isinstance(data[ikey], Dataset):
@@ -91,7 +101,7 @@ def to_hours(data, dim='time', times=(0, 12), as_dataset=False, hour='hour', **k
     # make sure the shape is as promissed:
     data = data.reindex({hour: list(times)})
     if as_dataset:
-        return ff.xarray.array2dataset(data, hour, rename={i: 't%02d' % i for i in times})
+        return ff.xarray.array_to_dataset(data, hour, rename={i: 't%02d' % i for i in times})
     return data
 
 
@@ -238,7 +248,7 @@ def align_datetime(data, dim='time', plev='plev', times=(0, 12), span=6, freq='1
     conflicts = u[c > 1]
     ff.message("Conflicts remain:", conflicts.size, idx_std.sum(), newdates.size)
     #
-    # new dates
+    # new dates / new object
     #
     data = data.assign_coords({dim: newdates})
     #

@@ -121,3 +121,75 @@ def breakpoints_histograms(data, name, adjname, breakname, dim='time', levdim='p
         ay.grid()
         ax += [ay]
     return f, ax
+
+
+def departures(var1, var2, data=None, dim='time', lev=None, colorlevels=None, logy=False, yticklabels=None,
+               legend=True, ax=None, **kwargs):
+    """
+
+    Args:
+        var1 (str, DataArray):
+        var2 (str, DataArray):
+        data (Dataset):
+        dim (str):
+        lev (str):
+        colorlevels (list):
+        logy (bool):
+        yticklabels (list):
+        legend (bool):
+        ax (axis):
+        **kwargs:
+
+    Returns:
+
+    """
+    from xarray import Dataset, DataArray
+    from ..met.time import correlate, statistics
+    from ._helpers import line, contour, get_info, set_labels
+
+    if data is not None:
+        if not isinstance(data, Dataset):
+            raise ValueError('Requires a Dataset', type(data))
+        if var1 not in data.data_vars or var2 not in data.data_vars:
+            raise ValueError("Variables not found: ", var1, var2, "<>", data.data_vars)
+        var1 = data[var1]
+        var2 = data[var2]
+
+    if not isinstance(var1, DataArray):
+        raise ValueError('Requires a DataArray', type(var1))
+
+    if not isinstance(var2, DataArray):
+        raise ValueError('Requires a DataArray', type(var2))
+
+    if dim not in var1.dims or dim not in var2.dims:
+        raise ValueError('Requires a datetime dimension', dim)
+
+    if lev is not None and lev not in var1.dims and lev not in var2.dims:
+        raise ValueError('Requires a level dimension', lev)
+
+    if colorlevels is not None:
+        if isinstance(colorlevels, str):
+            colorlevels = eval(colorlevels)  # plot_levels, plot_arange
+
+    diff = var1 - var2
+    diff.name = '{}_{}'.format(var1.name, var2.name)
+    diff.attrs['standard_name'] = 'dep_' + var1.attrs.get('standard_name', diff.name)
+    diff.attrs['units'] = var1.attrs.get('units', '1')
+    cor = correlate(var1, var2, dim=dim, **kwargs).median().values
+    rmse = statistics(var1, f='rmse', y=var2, dim=dim, **kwargs).median().values
+    med = diff.median().values
+    kwargs['title'] += " Dep({}-{}) R: {:.2f} RMSE: {:6.2f} M: {:6.2f}".format(var1.name, var2.name, cor, rmse, med)
+
+    if lev is None:
+        set_labels(kwargs, xlabel=get_info(diff[dim]), title=get_info(diff), ylabel=get_info(diff))
+        return line(diff[dim].values, diff.values, ax=ax, **kwargs)
+    else:
+        set_labels(kwargs, extend='both', xlabel=get_info(diff[dim]), ylabel=get_info(diff[lev]),
+                   title=get_info(diff), clabel=get_info(diff))
+        if 'units' in diff[lev].attrs:
+            units = diff[lev].attrs['units']
+            if units == 'hPa':
+                kwargs.update({'levfactor': 1})
+
+        return contour(ax, diff[dim].values, diff[lev].values, diff.values, logy=logy, colorlevels=colorlevels,
+                       yticklabels=yticklabels, legend=legend, **kwargs)

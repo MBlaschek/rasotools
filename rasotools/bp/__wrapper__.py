@@ -140,8 +140,9 @@ def apply_threshold(data, dim='time', var=None, name='breaks', suffix=None, thre
         raise ValueError('requires a datetime dimension', dim)
 
     axis = idata.dims.index(dim)
-    params = {'units': '1', 'thres': thres, 'dist': dist, 'min_levels': min_levels, 'standard_name': 'breaks',
-              'info': '1=breakpoint, 2=breakpoint at level'}
+    params = {'units': '1', 'thres': thres, 'dist': dist, 'min_levels': min_levels, 'standard_name': 'break_flag',
+              'flag_valus': [0, 1, 2, 3], 'valid_range': (0, 3),
+              'flag_meanings': 'not_significant significant significant_at_other_level significant_at_level'}
 
     if ensemble:
         kwargs['nthres'] = kwargs.get('nthres', 50)
@@ -270,7 +271,8 @@ adjustments these with a mean  adjustment going back in time.
     axis = idata.dims.index(dim)
     params = idata.attrs.copy()  # deprecated (xr-patch)
     ff.message(name, str(values.shape), 'A:', axis, **kwargs)
-    params.update({'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90), 'ratio': int(ratio)})
+    params.update(
+        {'sample_size': kwargs.get('sample_size', 130), 'borders': kwargs.get('borders', 90), 'ratio': int(ratio)})
     ff.message(ff.dict2str(params), **ff.levelup(**kwargs))
     stdn = data[name].attrs.get('standard_name', name)
 
@@ -910,7 +912,7 @@ def apply_metadata(data, dim='time', window=30,
                    lon='lon', lat='lat', distance_weight=1, distance_threshold=10,
                    read_igra=True, meta_ident=None, meta_weight=1,
                    stype='sonde_type', sonde_weight=1, **kwargs):
-    from .meta import location_change, sondetype, metadata
+    from .meta import location_change, metadata
     if not isinstance(data, Dataset):
         raise ValueError()
 
@@ -927,3 +929,11 @@ def apply_metadata(data, dim='time', window=30,
         if meta_ident is None:
             raise ValueError('')
         metadata(meta_ident, data[dim].values, dim=dim, window=window, **kwargs)
+
+
+def apply_biasadjustments(adjdata, data, isodb=False, **kwargs):
+    # calculate the bias adjustmens and for sounding times
+    # interpolate between sounding times
+    # interpolate to table format?
+
+    pass

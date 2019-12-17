@@ -13,14 +13,8 @@ Updated: %s
 
 import os as _os
 
-from .Radiosonde import *
-from .Network import *
+from . import cls
 from . import fun
-from . import met
-from . import grid
-from . import bp
-from . import plot
-from .fun.Bunch import Bunch as _Bunch
 
 
 def _getlibs():
@@ -32,7 +26,9 @@ def _getlibs():
     return __version__, numpy.__version__, pandas.__version__, xarray.__version__
 
 
-config = _Bunch()
+stations = fun.station.read_igrav2_stationlist(None)
+
+config = cls.Bunch()
 config.homedir = _os.getenv("HOME")
 config.wkdir = _os.getcwd()
 config.igradir = ''
@@ -92,3 +88,30 @@ def dump_config(filename='rasoconfig.json'):
         file.write(json.dumps(variables, indent=0))
 
     print("Configuration written: ", filename)
+
+
+def open_radiosonde(name, ident=None, filename=None, directory=None, **kwargs):
+    """ Create a Radiosonde object from opening a dataset
+
+    Args:
+        name (str): used as filename and/or as dataset name
+        ident (str): radiosonde wmo or igra id
+        filename (str): filename to read from (netcdf)
+        directory (str): directory of radiosonde store, default config rasodir
+
+    Returns:
+        Radiosonde : Radiosonde class object
+    """
+    from .cls import Radiosonde
+    from .fun import get_data
+    if name == 'example':
+        ident = 'AUM00011035'
+        name = 'IGRAv2'
+        filename = get_data('AUM00011035_XARRAY.nc')
+
+    if ident is None:
+        ident = "Unknown"
+
+    out = Radiosonde(ident)
+    out.add(name, filename=filename, directory=directory, **kwargs)
+    return out

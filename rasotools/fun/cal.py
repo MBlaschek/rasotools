@@ -88,8 +88,27 @@ def sample(values, nmin, nmax, func, borders=0, flip=False, fargs=(), **kwargs):
         return func(values[j:], *fargs)
 
 
+def mse(x, y=None, axis=None):
+    """ mean squared error
+
+    :math:`MSE =\\frac{1}{n}\\sum_{t=1}^n (y_t - \\hat{y}_t)^2`
+
+    Args:
+        x:
+        y:
+        axis:
+
+    Returns:
+        mse :
+    """
+    import numpy as np
+    if y is None:
+        y = 0.
+    return np.nanmean((x - y) * (x - y), axis=axis)
+
+
 def rmse(x, y=None, axis=None):
-    """ RMSE
+    """ root mean squared error
 
     Args:
         x:
@@ -103,6 +122,24 @@ def rmse(x, y=None, axis=None):
     if y is None:
         y = 0.
     return np.sqrt(np.nanmean((x - y) * (x - y), axis=axis))
+
+
+def rcmse(x, y=None, axis=None):
+    """ root centered mean squared error
+
+    Args:
+        x:
+        y:
+        axis:
+
+    Returns:
+
+    """
+    import numpy as np
+    if y is None:
+        y = 0.
+    bias = np.nanmean(x - y)
+    return np.sqrt(np.nanmean((x - y - bias) * (x - y - bias), axis=axis))
 
 
 def fuzzy_all(x, axis=0, thres=2):
@@ -522,7 +559,7 @@ def fix_datetime(itime, span=6, debug=False):
         datetime : standard datetime
     """
     import pandas as pd
-    itime = pd.Timestamp(itime)   # (time: 34%)
+    itime = pd.Timestamp(itime)  # (time: 34%)
     # span=6 -> 0, 12
     # [18, 6[ , [6, 18[
     # span=3 -> 0, 6, 12, 18
@@ -535,7 +572,7 @@ def fix_datetime(itime, span=6, debug=False):
         # 18 >= 18 or 18 < 6  > 00
         # 0 >= 18 or 0 < 6    > 00
         if debug:
-            print("%d [%d] %d >= %d < %d" %(ihour, span, lower, itime.hour, upper))
+            print("%d [%d] %d >= %d < %d" % (ihour, span, lower, itime.hour, upper))
 
         if (ihour - span) < 0:
             if itime.hour >= lower or itime.hour < upper:

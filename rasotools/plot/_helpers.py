@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
-def plot_levels(imin, m=None, p=1, n=13):
+def plot_levels(imin, m=None, p=0, n=13):
     """plotlevels with logspace
     """
     import numpy as np
@@ -258,3 +258,10 @@ def distance(ilon, ilat, lats, lons):
     dists = ix * x + iy * y + iz * z
     return np.arccos(dists * 0.999999)
 
+
+def stats(data, dim='time'):
+    from ..met.time import statistics
+    med = data.median().values
+    std = data.std().values
+    rmse = statistics(data, f='rmse', dim=dim).median().values
+    return "R:{:.2f} M:{:.2f} S:{:.2f}".format(rmse, med, std)

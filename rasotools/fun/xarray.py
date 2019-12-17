@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ["xarray_function_wrapper", "array2dataset", "update_shape", 'combine_datasets', 'table_to_dataset']
+__all__ = ["xarray_function_wrapper", "array_to_dataset", "update_shape", 'combine_datasets', 'table_to_dataset']
 
 
 def xarray_function_wrapper(x, wfunc=None, add_dim=None, y=None, **kwargs):
@@ -59,43 +59,6 @@ def xarray_function_wrapper(x, wfunc=None, add_dim=None, y=None, **kwargs):
                               keep_attrs=True)
 
 
-def array2dataset(data, dim, rename=None):
-    """ Convert a DataArray to Dataset and consider dependent coordinates
-
-    Args:
-        data (DataArray): Input DataArray
-        dim (str): Coordinate to use as variables
-        rename (dict): renaming policy
-
-    Returns:
-        Dataset :
-    """
-    from xarray import DataArray
-
-    if not isinstance(data, DataArray):
-        raise ValueError('Requires a DataArray', type(data))
-
-    if dim not in data.dims:
-        raise ValueError('Requires a datetime dimension', dim)
-
-    data = data.copy()
-    tmp = {}
-
-    for i, j in data.coords.items():
-        if dim in j.dims and i != dim:
-            tmp[i] = data[i]
-            data = data.drop(i)
-
-    data = data.to_dataset(dim=dim)
-    for i, j in tmp.items():
-        data[i] = j  # add as Coords / Variables
-
-    if rename is not None:
-        return data.rename(rename)
-
-    return data
-
-
 def set_attrs(data, name, set='', add='', default=''):
     from xarray import Dataset, DataArray
     if not isinstance(data, (Dataset, DataArray)):
@@ -136,6 +99,43 @@ def update_shape(data, order):
 
     if len(iorder) > 0:
         return data.transpose(*iorder)
+    return data
+
+
+def array_to_dataset(data, dim, rename=None):
+    """ Convert a DataArray to Dataset and consider dependent coordinates
+
+    Args:
+        data (DataArray): Input DataArray
+        dim (str): Coordinate to use as variables
+        rename (dict): renaming policy
+
+    Returns:
+        Dataset :
+    """
+    from xarray import DataArray
+
+    if not isinstance(data, DataArray):
+        raise ValueError('Requires a DataArray', type(data))
+
+    if dim not in data.dims:
+        raise ValueError('Requires a datetime dimension', dim)
+
+    data = data.copy()
+    tmp = {}
+
+    for i, j in data.coords.items():
+        if dim in j.dims and i != dim:
+            tmp[i] = data[i]
+            data = data.drop(i)
+
+    data = data.to_dataset(dim=dim)
+    for i, j in tmp.items():
+        data[i] = j  # add as Coords / Variables
+
+    if rename is not None:
+        return data.rename(rename)
+
     return data
 
 

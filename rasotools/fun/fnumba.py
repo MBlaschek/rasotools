@@ -28,3 +28,16 @@ def mann_kenddall_test_calculate_s(x):
                     pass
                 # s += np.sign(x[j] - x[k])
     return s
+
+
+@njit(cache=True)
+def in1di(x, y):
+    out = np.empty(x.shape, dtype=np.int32)
+    out.fill(0)
+    for i in range(x.shape[0]):
+        for j in range(y.shape[0]):
+            if x[i] == y[j]:
+                out[i] = j
+                break
+
+    return out

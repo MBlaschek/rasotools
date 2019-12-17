@@ -11,7 +11,7 @@ cera_grid = None
 
 
 def station_class(sonde, **kwargs):
-    from .. import Radiosonde
+    from ..cls import Radiosonde
     if not isinstance(sonde, Radiosonde):
         raise ValueError('Requires a Radiosonde class object')
     for iatt in sonde.attrs:
@@ -125,12 +125,17 @@ def station(lon, lat, label=None, marker='o', markersize=20, bounds=1, ax=None, 
 
 def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=True, coastlines=True, rivers=False,
            grid=True, posneg=False, extent=None, lloffset=0.2, showcost=False, clabel=None, cbars={}, colorlevels=None,
-           **kwargs):
+           data=None, vmin=None, vmax=None, dropna=False, **kwargs):
     import numpy as np
     import cartopy as cpy
     from matplotlib.colors import BoundaryNorm
     import matplotlib.pyplot as plt
     from ._helpers import cost
+
+    if data is not None:
+        lon = data[lon]
+        lat = data[lat]
+        values = data
 
     lon = np.asarray(lon)
     lat = np.asarray(lat)
@@ -139,9 +144,27 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
         raise ValueError("Lon and Lat need same size")
 
     if values is not None:
-        values = np.asarray(values)
+        values = np.asarray(values, dtype=float)
+        nn = np.size(values)
         if lon.size != lat.size or lon.size != values.size:
             raise ValueError("Lon, Lat and Values need same size", lon.size, lat.size, values.size)
+
+        if vmin is not None:
+            idx = values < vmin
+            values[idx] = np.nan
+            print("vmin", idx.sum(), nn)
+
+        if vmax is not None:
+            idx = values > vmax
+            values[idx] = np.nan
+            print("vmax", idx.sum(), nn)
+
+        if dropna:
+            idx = np.isfinite(values)
+            values = values[idx]
+            lon = lon[idx]
+            lat = lat[idx]
+            print("NA", nn - idx.sum(), nn)
 
     projection = kwargs.get('projection', cpy.crs.PlateCarree())
     ax = plt.axes(projection=projection)
@@ -172,6 +195,9 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
         cmap = plt.get_cmap(kwargs.pop('cmap', None))
         norm = None
         if colorlevels is not None:
+            if isinstance(colorlevels, str):
+                colorlevels = eval(colorlevels)  # plot_levels, plot_arange
+
             norm = BoundaryNorm(colorlevels, cmap.N)
 
         cs = ax.scatter(lon, lat, s=markersize, c=values,
@@ -229,7 +255,7 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
     else:
         title = 'Stations # %d' % np.size(lon)
 
-    ax.set_title(kwargs.get('title', '') +' '+ title)
+    ax.set_title(kwargs.get('title', '') + ' ' + title)
 
     if 'xlabel' in kwargs.keys():
         ax.set_xlabel(kwargs.get('xlabel'))

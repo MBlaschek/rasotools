@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 
-__all__ = ['find_files', 'now', 'message', 'dict2str', 'print_fixed', 'check_kw', 'update_kw', 'suche123', 'dict_add',
-           'dict_in_dict', 'list_in_list', 'levelup', 'leveldown', 'get_data', 'load_rttov']
-
 
 def now(timespec='auto'):
     """ Datetime string
@@ -51,6 +48,10 @@ def message(*args, mname=None, verbose=0, level=0, logfile=None, **kwargs):
         print(text)
     else:
         pass
+
+
+def bool_verbose(verbose=0, levels=0, **kwargs):
+    return verbose > levels
 
 
 def _print_string(*args, adddate=False, **kwargs):
@@ -153,6 +154,13 @@ def list_in_list(jlist, ilist):
         else:
             pass
     return out
+
+
+def get_from_list(ilist, pattern):
+    for ivar in ilist:
+        if pattern in ivar:
+            return ivar
+    return None
 
 
 def dict_in_dict(a, b, method='difference'):

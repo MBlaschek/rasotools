@@ -1,28 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
+
 import xarray as xr
-from .fun import message, update_kw, dict_add, Bunch
 
-__all__ = ["Radiosonde", "open_radiosonde"]
+from .bunch import Bunch
+from ..fun import message, update_kw, dict_add, print_fixed, netcdf, levelup
 
-
-def open_radiosonde(name, ident=None, filename=None, directory=None, **kwargs):
-    """ Create a Radiosonde object from opening a dataset
-
-    Args:
-        name (str): used as filename and/or as dataset name
-        ident (str): radiosonde wmo or igra id
-        filename (str): filename to read from (netcdf)
-        directory (str): directory of radiosonde store, default config rasodir
-
-    Returns:
-        Radiosonde : Radiosonde class object
-    """
-    if ident is None:
-        ident = "Unknown"
-    out = Radiosonde(ident)
-    out.add(name, filename=filename, directory=directory, **kwargs)
-    return out
+__all__ = ["Radiosonde"]
 
 
 class Radiosonde(object):
@@ -78,7 +62,7 @@ class Radiosonde(object):
         if xwargs is None:
             xwargs = {}
 
-        from . import config
+        from .. import config
 
         if self.directory is not None:
             directory = self.directory
@@ -128,9 +112,7 @@ class Radiosonde(object):
             self.data[name] = xr.open_dataset(filename, **xwargs)
 
         if close:
-
             # add this to make sure that a file is read and closed (some error with h5netcdf, h5py)
-
             if hasattr(self.data[name], 'close'):
                 self.data[name].load()
                 self.data[name].close()
@@ -178,10 +160,10 @@ class Radiosonde(object):
             self.data.__dict__[new_name] = self.data.__dict__.pop(old_name)
             message(old_name, " > ", new_name, **kwargs)
 
-    def list_store(self, directory=None, varinfo=False, ncinfo=False):
+    def list_store(self, pattern=None, directory=None, varinfo=False, ncinfo=False):
         import time
-        from . import config
-        from . import fun as ff
+        from numpy import ceil
+        from .. import config
 
         if self.directory is not None:
             directory = self.directory
@@ -195,20 +177,23 @@ class Radiosonde(object):
             print("Available Files (Datasets): ")
             print(directory)
             print('_' * 80)
-            for ifile in os.listdir(directory):
+            for ifile in sorted(os.listdir(directory)):
                 if os.path.isdir(directory + ifile):
                     continue
+                if pattern is not None:
+                    if pattern not in ifile:
+                        continue
 
                 current = os.path.getsize(directory + ifile) / 1024 / 1024
                 itime = time.ctime(os.path.getctime(directory + ifile))
-                print("%-40s : %4d MB  : %s" % (ifile, current, itime))
+                print("%-40s : %4d MB  : %s" % (ifile, ceil(current), itime))
                 if '.nc' in ifile:
                     if varinfo:
                         with xr.open_dataset(directory + ifile) as f:
                             print("Variables:")
-                            print(ff.print_fixed(list(f.data_vars), ',', 80, offset=10))
+                            print(print_fixed(list(f.data_vars), ',', 80, offset=10))
                     elif ncinfo:
-                        ff.netcdf.view(directory + ifile)
+                        netcdf.view(directory + ifile)
                     else:
                         pass
                 # print('_' * 80)
@@ -217,6 +202,27 @@ class Radiosonde(object):
             print("\n%40s : %4d MB" % ('Total', summe))
         else:
             print("Store not found!")
+
+    def in_store(self, name, directory=None, **kwargs):
+        from .. import config
+
+        if self.directory is not None:
+            directory = self.directory
+
+        if directory is None:
+            directory = config.rasodir
+            directory += "/%s/" % self.ident
+
+        if os.path.isdir(directory):
+            for ifile in os.listdir(directory):
+                if os.path.isdir(directory + ifile):
+                    continue
+
+                if name in directory + ifile:
+                    message("Found: ", name, directory + ifile, **kwargs)
+                    return True
+                message(name, "!=", ifile, **levelup(**kwargs))
+        return False
 
     def to_netcdf(self, name, filename=None, directory=None, force=False, add_global=True, xwargs=None, **kwargs):
         """Write each dataset variable to NetCDF 4
@@ -235,7 +241,7 @@ class Radiosonde(object):
         if xwargs is None:
             xwargs = {}
 
-        from . import config
+        from .. import config
 
         if not isinstance(name, list):
             name = [name]

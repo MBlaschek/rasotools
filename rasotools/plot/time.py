@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
+import matplotlib.pyplot as plt
 import numpy as np
 from xarray import DataArray, Dataset
-import matplotlib.pyplot as plt
 
 __all__ = ['threshold', 'summary', 'var', 'breakpoints', 'snht']
 
@@ -25,7 +25,7 @@ def threshold(data, dim='time', lev=None, thres=50, colorlevels=None, legend=Tru
     Returns:
         plt.axes
     """
-    from ._helpers import line, contour, set_labels, get_info, plot_levels as pl, plot_arange as pa
+    from ._helpers import line, contour, set_labels, get_info
 
     if not isinstance(data, DataArray):
         raise ValueError('Requires a DataArray', type(data))
@@ -115,7 +115,7 @@ def var(data, dim='time', lev=None, colorlevels=None, logy=False, yticklabels=No
     Returns:
 
     """
-    from ._helpers import line, contour, get_info, set_labels, plot_levels as pl, plot_arange as pa
+    from ._helpers import line, contour, get_info, set_labels, stats
 
     if not isinstance(data, DataArray):
         raise ValueError('Requires a DataArray', type(data))
@@ -128,7 +128,11 @@ def var(data, dim='time', lev=None, colorlevels=None, logy=False, yticklabels=No
 
     if colorlevels is not None:
         if isinstance(colorlevels, str):
-            colorlevels = eval(colorlevels)   # plot_levels, plot_arange
+            colorlevels = eval(colorlevels)  # plot_levels, plot_arange
+
+    if 'title' in kwargs.keys():
+        if '{stat}' in kwargs['title']:
+            kwargs['title'] = kwargs['title'].format(**{'stat': stats(data, dim=dim)})
 
     if lev is None:
         set_labels(kwargs, xlabel=get_info(data[dim]), title=get_info(data), ylabel=get_info(data))

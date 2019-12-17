@@ -1,46 +1,48 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__all__ = ['download_igrav2_stationlist', 'read_igrav2_stationlist']
+__all__ = ['download_igrav2_stationlist', 'read_igrav2_stationlist', 'download_wmo_stationlist', 'read_wmo_statiolist',
+           'build_stationlist_from_netcdf_archive']
 
 
 def build_stationlist_from_netcdf_archive(pattern, directory=None, **kwargs):
     """
 
     Args:
-        pattern:
-        directory:
-        attributes:
+        pattern (str): file pattern (ERA5_*.nc)
+        directory: archive directory (rasotools.config.rasodir)
         **kwargs:
 
     Returns:
-
+        DataFrame : station information (id, lon, lat, alt, start, end, toal, name)
     """
-    from multiprocessing import Pool
     import pandas as pd
     from .. import config
-    from . import find_files
+    from . import find_files, mp, levelup, message
     from .netcdf import view
 
     if directory is None:
         directory = config.rasodir
 
-    print("Searching in", directory, " with ", pattern)
+    message("Searching in", directory, " with ", pattern, **kwargs)
     files = find_files(directory, pattern)
     nn = len(files)
     if nn == 0:
         raise RuntimeError("No files found: ", directory, pattern)
 
-    print("#" * 80)
-    print("Example:")
+    message("#" * 80, **kwargs)
+    message("Example:", **kwargs)
     view(files[0])
-    print("Station Information:")
-    print(pd.Series(_get_netcdf_infos((0, files[0]))))
-    print("#" * 80)
+    message("Station Information:", **kwargs)
+    message(pd.Series(_get_netcdf_infos((0, files[0]))))
+    message("#" * 80, **kwargs)
     # stations = []
-    print("Starting Processing Pool(10) for ", nn, " files")
-    with Pool(10) as p:
-        stations = p.map(_get_netcdf_infos, zip(range(nn), files), )
+    message("Starting Processing Pool(10) for ", nn, " files", **kwargs)
+    stuff = mp.make_process_list(zip(range(nn), files), _get_netcdf_infos, **levelup(**kwargs))
+    errors, stations = mp.execute_process(stuff, npp=kwargs.get('npp', 10), return_value=True,
+                                          loop='loop' in kwargs.keys())
+    # with Pool(10) as p:
+    #     stations = p.map(_get_netcdf_infos, zip(range(nn), files), )
 
     # for ifile in progressbar.progressbar(files):
     #     infos = _get_netcdf_infos()
@@ -65,6 +67,9 @@ def build_stationlist_from_netcdf_archive(pattern, directory=None, **kwargs):
 def _get_netcdf_infos(arg, **kwargs):
     import numpy as np
     import xarray as xr
+    #
+    # recover arguments
+    #
     j, ifile = arg
     #
     # Identifier
@@ -170,7 +175,7 @@ def _get_netcdf_infos(arg, **kwargs):
     return infos
 
 
-def read_igrav2_stationlist(stationfile):
+def read_igrav2_stationlist(stationfile, **kwargs):
     """Read IGRA Radiosondelist
 
     or download
@@ -185,23 +190,32 @@ def read_igrav2_stationlist(stationfile):
     -------
     DataFrame
     """
+    import os
     import numpy as np
     import pandas as pd
+    from . import message
 
+    if stationfile is None and os.path.isfile('results/igra2-station-list.csv'):
+        try:
+            return pd.read_csv('results/igra2-station-list.csv')
+        except:
+            pass
     if stationfile is None:
         try:
             from . import get_data
             stationfile = get_data("igra2-station-list.txt")
         except ImportError:
+            message("Module Data not found: ax", **kwargs)
             pass
-    print("Reading :", stationfile)
+
+    message("Reading :", stationfile, **kwargs)
     try:
         infile = open(stationfile)
         tmp = infile.read()
         data = tmp.splitlines()
 
     except IOError as e:
-        print("File not found: " + stationfile)
+        message("File not found: " + stationfile, **kwargs)
         raise e
     else:
         infile.close()
@@ -230,6 +244,9 @@ def read_igrav2_stationlist(stationfile):
     out.loc[out.lon <= -998.8, 'lon'] = np.nan  # repalce missing values
     out.loc[out.alt <= -998.8, 'alt'] = np.nan  # repalce missing values
     out.loc[out.lat <= -98.8, 'lat'] = np.nan  # replace missing values
+    out['start'] = out['start'].astype(int)
+    out['end'] = out['end'].astype(int)
+    out['total'] = out['total'].astype(int)
     out['name'] = out.name.str.strip()
     out = out.set_index('id')
     return out

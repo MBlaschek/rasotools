@@ -12,9 +12,11 @@ Read and bias adjust radiosonde data using background departure statistics from 
 
 
 
-<img src="https://www.ecmwf.int/sites/default/files/styles/news_item_main_image/public/project_logos/ERA-Clim-logo-transparent.png?itok=OjZfu303" alt="eraclim" width="25%" /> ![eraclim2](https://www.ecmwf.int/sites/default/files/styles/news_item_main_image/public/project_logos/ERAClim2-logo%28203px%29.png?itok=QjDC6rd-) ![copernicus](https://climate.copernicus.eu/themes/custom/ce/logo.svg)<img src="https://www.ecmwf.int/sites/default/files/ECMWF_Master_Logo_RGB_nostrap.png" alt="ecmwf" style="zoom:25%;" />
+<img src="https://www.ecmwf.int/sites/default/files/styles/news_item_main_image/public/project_logos/ERA-Clim-logo-transparent.png?itok=OjZfu303" alt="eraclim" width="150px" /> <img src="https://www.ecmwf.int/sites/default/files/styles/news_item_main_image/public/project_logos/ERAClim2-logo%28203px%29.png?itok=QjDC6rd-"  alt="eraclim2" width="150px" /> <img src="https://climate.copernicus.eu/themes/custom/ce/logo.svg" alt="copernicus" width="150px" /><img src="https://www.ecmwf.int/sites/default/files/ECMWF_Master_Logo_RGB_nostrap.png" alt="ecmwf" width="150px" />
 
-This project has received funding from the European Union’s Sixth/Seventh Framework Programme for research, technological development and demonstration under grant agreement no 265229, no 607029.
+
+
+*This project has received funding from the European Union’s Sixth/Seventh Framework Programme for research, technological development and demonstration under grant agreement no 265229, no 607029.*
 
 
 [TOC]

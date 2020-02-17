@@ -199,6 +199,8 @@ class Network(object):
     def save_network(self):
         # save informations that make it possible to recreate this Network
         # create a directory
+        # just pickle the data object / whole network object
+
         pass
 
     def apply_function(self, variables=None, npp=10, **kwargs):
@@ -213,7 +215,8 @@ class Network(object):
 
     def plot_map(self, filename=None, **kwargs):
         from ..plot import map
-        ax = map.points(self.lon, self.lat, title=self.name, **kwargs)
+        kwargs.update({'title': self.name + kwargs.get('title','')})
+        ax = map.points(self.lon, self.lat, **kwargs)
         if filename is not None:
             plt.savefig(filename, **kwargs)
         return ax

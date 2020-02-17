@@ -34,22 +34,19 @@ def build_stationlist_from_netcdf_archive(pattern, directory=None, **kwargs):
     message("Example:", **kwargs)
     view(files[0])
     message("Station Information:", **kwargs)
-    message(pd.Series(_get_netcdf_infos((0, files[0]))))
+    message(pd.Series(_get_netcdf_infos((0, files[0]), **kwargs)), **kwargs)
     message("#" * 80, **kwargs)
     # stations = []
     message("Starting Processing Pool(10) for ", nn, " files", **kwargs)
     stuff = mp.make_process_list(zip(range(nn), files), _get_netcdf_infos, **levelup(**kwargs))
-    errors, stations = mp.execute_process(stuff, npp=kwargs.get('npp', 10), return_value=True,
-                                          loop='loop' in kwargs.keys())
-    # with Pool(10) as p:
-    #     stations = p.map(_get_netcdf_infos, zip(range(nn), files), )
-
-    # for ifile in progressbar.progressbar(files):
-    #     infos = _get_netcdf_infos()
-    #     stations += infos
+    errors, stations = mp.execute_process(stuff,
+                                          npp=kwargs.get('npp', 10),
+                                          return_value=True,
+                                          loop='loop' in kwargs.keys(),
+                                          extend=kwargs.get('extend', False))
 
     stations = pd.DataFrame(stations)
-    stations['src'] = list(map(lambda x: x.replace('.nc', '').split('_')[0], stations['file']))
+    stations['src'] = list(map(lambda x: x.replace('.nc', '').split('_')[-2], stations['file']))
     stations = stations[~stations['src'].str.contains('Kopie')]  # remove something wired
     stations['id'] = stations.id.str.replace('-dataset.txt.gz', '')
     for i in range(stations.id.size):
@@ -64,8 +61,9 @@ def build_stationlist_from_netcdf_archive(pattern, directory=None, **kwargs):
     return stations
 
 
-def _get_netcdf_infos(arg, **kwargs):
+def _get_netcdf_infos(arg, last_pos=True, debug=False,  **kwargs):
     import numpy as np
+    import pandas as pd
     import xarray as xr
     #
     # recover arguments
@@ -98,7 +96,7 @@ def _get_netcdf_infos(arg, **kwargs):
     else:
         g = ifile
 
-    with xr.open_dataset(g, **kwargs) as ds:
+    with xr.open_dataset(g) as ds:
         #
         # Attributes
         #
@@ -116,18 +114,24 @@ def _get_netcdf_infos(arg, **kwargs):
         #
         # Some information might be Variables (IGRA, UADB)
         #
-        if infos['lon'] is None:
-            for i in ['lon', 'longitude', 'stlon']:
-                if i in list(ds.data_vars):
+        # if infos['lon'] is None:
+        for i in ['lon', 'longitude', 'stlon']:
+            if i in list(ds.data_vars):
+                if last_pos:
                     infos['lon'] = float(ds[i].values[-1])
-        if infos['lat'] is None:
-            for i in ['lat', 'latitude', 'stlat']:
-                if i in list(ds.data_vars):
+                else:
+                    infos['lon'] = ds[i].copy()
+        # if infos['lat'] is None:
+        for i in ['lat', 'latitude', 'stlat']:
+            if i in list(ds.data_vars):
+                if last_pos:
                     infos['lat'] = float(ds[i].values[-1])
-        if infos['alt'] is None:
-            for i in ['alt', 'stalt']:
-                if i in list(ds.data_vars):
-                    infos['alt'] = float(ds[i].values[-1])
+                else:
+                    infos['lat'] = ds[i].copy()
+        # if infos['alt'] is None:
+        for i in ['alt', 'stalt']:
+            if i in list(ds.data_vars):
+                infos['alt'] = float(ds[i].values[-1])
         #
         # Min Year, Max Year
         #
@@ -144,7 +148,6 @@ def _get_netcdf_infos(arg, **kwargs):
             infos['total'] = int(ds.count().to_array().max())
         else:
             infos['total'] = int(ds.count(idate).to_array().max())
-
     #
     # fix filenames
     #
@@ -162,6 +165,7 @@ def _get_netcdf_infos(arg, **kwargs):
             infos['lon'] = float(infos['lon'].split()[0])
         except:
             pass
+
     if isinstance(infos['lat'], str):
         try:
             infos['lat'] = float(infos['lat'].split()[0])
@@ -172,6 +176,25 @@ def _get_netcdf_infos(arg, **kwargs):
             infos['alt'] = float(infos['alt'].split()[0])
         except:
             pass
+
+    try:
+        tmp = pd.concat([infos['lon'].to_dataframe(), infos['lat'].to_dataframe()], axis=1)
+        # infos['nloc'] = (tmp.groupby(['lon', 'lat']).size()).size
+        new = []
+        for i, m in list(tmp.groupby(['lon', 'lat'])):
+            j = infos.copy()
+            j['lon'] = m['lon'].iloc[-1]
+            j['lat'] = m['lat'].iloc[-1]
+            j['ptime'] = m.index.year[-1]
+            j['pcount'] = m.size
+            new.append(j)
+        infos = new
+        # infos['lon'], infos['lat'] = tmp.groupby(['lon', 'lat']).size().idxmax()
+    except Exception as e:
+        if debug:
+            raise e
+        infos['lon'], infos['lat'] = infos['lon'].item(-1),infos['lat'].item(-1)
+
     return infos
 
 

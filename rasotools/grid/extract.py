@@ -68,12 +68,10 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, dim=None, de
     dattrs = dict(data.attrs)
     newcoords = {i: data[i].copy() for i in iorder}
 
+    if dim is None:
+        dim = 'station'
     if len(iorder) == 0:
-        if dim is None:
-            iorder = ['station']
-            dim = 'station'
-        else:
-            iorder = [dim]
+        iorder = [dim]
 
     mm = 0
     for jlon, jlat in zip(lon, lat):
@@ -125,7 +123,7 @@ def extract_locations(data, lon, lat, method='bilinear', raw=False, dim=None, de
                 dattrs['cell_method'] = "%s,%s: intp(%s)" % (name_lon, name_lat, method)
                 newcoords[name_lon] = jlon - 360. if jlon > 180 else jlon
                 newcoords[name_lat] = jlat
-                newcoords[dim] = [mm]
+                newcoords[dim] = mm
                 tmp = DataArray(tmp, coords=newcoords, dims=iorder, name=data.name, attrs=dattrs)
             locations.append(tmp.copy())
             mm += 1

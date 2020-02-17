@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import numpy as np
+
+np.seterr(invalid='ignore')
 
 
 def vrange(x, axis=0):
@@ -8,7 +11,7 @@ def vrange(x, axis=0):
         x (ndarray): input dataset
         axis (int): axis
     """
-    import numpy as np
+
     return np.min(x, axis=axis), np.max(x, axis=axis)
 
 
@@ -22,7 +25,6 @@ def nanrange(x, axis=0):
     Returns:
         tuple : min, max
     """
-    import numpy as np
     return np.nanmin(x, axis=axis), np.nanmax(x, axis=axis)
 
 
@@ -34,7 +36,6 @@ def nancount(x, axis=0, keepdims=False):
         axis (int): axis
         keepdims (bool): keep dimensions
     """
-    import numpy as np
     return np.sum(np.isfinite(x), axis=axis, keepdims=keepdims)
 
 
@@ -54,19 +55,12 @@ def nanfunc(data, n=130, axis=0, nmax=1460, borders=0, ffunc=None, flip=False, f
     Returns:
         np.ndarray : func of values at axis, with sample size, borders and maximum
     """
-    import numpy as np
     if ffunc is None:
         ffunc = np.nanmean
     return np.apply_along_axis(sample, axis, data, n, nmax, ffunc, borders=borders, flip=flip, fargs=fargs)
 
 
 def sample(values, nmin, nmax, func, borders=0, flip=False, fargs=(), **kwargs):
-    # variable output, One value or array
-    # todo make a numba version of this function
-    # make everything loops and stuff
-    # find nan
-    # find max, min number of dataset and apply function
-    import numpy as np
     itx = np.isfinite(values)
     n = itx.sum()
     j = 0
@@ -78,6 +72,7 @@ def sample(values, nmin, nmax, func, borders=0, flip=False, fargs=(), **kwargs):
         return func(values[itx][j:(nmax + j)], *fargs)  # normal
 
     elif n < nmin:
+        # raises all nan warnings !!!
         return func(values, *fargs) * np.nan
 
     else:
@@ -101,7 +96,6 @@ def mse(x, y=None, axis=None):
     Returns:
         mse :
     """
-    import numpy as np
     if y is None:
         y = 0.
     return np.nanmean((x - y) * (x - y), axis=axis)
@@ -118,7 +112,6 @@ def rmse(x, y=None, axis=None):
     Returns:
         float : RMSE
     """
-    import numpy as np
     if y is None:
         y = 0.
     return np.sqrt(np.nanmean((x - y) * (x - y), axis=axis))
@@ -135,7 +128,6 @@ def rcmse(x, y=None, axis=None):
     Returns:
 
     """
-    import numpy as np
     if y is None:
         y = 0.
     bias = np.nanmean(x - y)
@@ -153,7 +145,6 @@ def fuzzy_all(x, axis=0, thres=2):
     Returns:
         bool
     """
-    import numpy as np
     if np.sum(x, axis=axis) > (np.shape(x)[axis] / np.float(thres)):
         return True
     else:
@@ -195,7 +186,6 @@ def distance(lon, lat, ilon, ilat, miles=False):
     Haversine Formula
     http://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
     """
-    import numpy as np
     rad_factor = np.pi / 180.0  # for trignometry, need angles in radians
     mlat, mlon, jlat, jlon = lat * rad_factor, lon * rad_factor, ilat * rad_factor, ilon * rad_factor
     dlon = mlon - jlon
@@ -225,7 +215,6 @@ def linear_trend(y, x, method='polyfit', alpha=None, nmin=3, fit=False, axis=0, 
     Returns:
 
     """
-    import numpy as np
     if method not in ['polyfit', 'theil_sen', 'linregress', 'lsq']:
         raise ValueError('Requires either polyfit, theil_sen, linregress or lsq')
 
@@ -254,7 +243,6 @@ def linear_trend(y, x, method='polyfit', alpha=None, nmin=3, fit=False, axis=0, 
 
 
 def _trend_polyfit_wrapper(y, x, nmin=3, **kwargs):
-    import numpy as np
     ii = np.isfinite(y)
     if ii.sum() > nmin:
         # (k,d), residuals, rank, singular values (2), rcond
@@ -264,7 +252,6 @@ def _trend_polyfit_wrapper(y, x, nmin=3, **kwargs):
 
 
 def _trend_theilslopes_wrapper(y, x, nmin=3, **kwargs):
-    import numpy as np
     from scipy.stats import theilslopes
     ii = np.isfinite(y)
     if ii.sum() > nmin:
@@ -274,7 +261,6 @@ def _trend_theilslopes_wrapper(y, x, nmin=3, **kwargs):
 
 
 def _trend_linregress_wrapper(y, x, nmin=3):
-    import numpy as np
     from scipy.stats import linregress
     ii = np.isfinite(y)
     if ii.sum() > nmin:
@@ -284,7 +270,6 @@ def _trend_linregress_wrapper(y, x, nmin=3):
 
 
 def _trend_regression_wrapper(y, x, **kwargs):
-    import numpy as np
     n = np.size(x)
     xm = np.nanmedian(x)
     ym = np.nanmedian(y)
@@ -347,7 +332,6 @@ def mann_kendall_test(x, alpha=0.05):
       >>> trend,h,p,z = mk_test(x,0.05)
 
     """
-    import numpy as np
     from scipy.stats import norm
     from .fnumba import mann_kenddall_test_calculate_s
 
@@ -440,8 +424,6 @@ def num_samples_trend_test(beta, delta, std_dev, alpha=0.05, n=4, num_iter=1000,
           >>> num_samples = check_num_samples(0.2, 1, 0.1)
 
     """
-    import numpy as np
-
     # Initialize the parameters
     power = 1.0 - beta
     P_d = 0.0
@@ -522,7 +504,6 @@ def num_samples_trend_test(beta, delta, std_dev, alpha=0.05, n=4, num_iter=1000,
 
 
 def sample_wrapper(data, ffunc=None, nmin=130, axis=0, **kwargs):
-    import numpy as np
     if ffunc is None:
         ffunc = np.nanmean
     nn = np.isfinite(data).sum(axis=axis)
@@ -531,13 +512,11 @@ def sample_wrapper(data, ffunc=None, nmin=130, axis=0, **kwargs):
 
 
 def covariance(x, y, axis=0):
-    import numpy as np
     return np.nanmean((x - np.nanmean(x, axis=axis, keepdims=True))
                       * (y - np.nanmean(y, axis=axis, keepdims=True)), axis=axis)
 
 
 def pearson_correlation(x, y, axis=0):
-    import numpy as np
     return covariance(x, y, axis=axis) / (np.nanstd(x, axis=axis) * np.nanstd(y, axis=axis))
 
 

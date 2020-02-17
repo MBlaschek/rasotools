@@ -57,7 +57,7 @@ def location_change(lon, lat, dim='time', ilon=None, ilat=None, **kwargs):
     return dist
 
 
-def sondetype(data, dim='time', window=30, **kwargs):
+def sondetype(data, dim='time', window=30, as_event=True, **kwargs):
     """ Make breakpoint series from sondetype changes
 
     Args:
@@ -77,16 +77,17 @@ def sondetype(data, dim='time', window=30, **kwargs):
 
     data = data.copy()
     data = data.bfill(dim).rolling(center=True, **{dim: window}).median().bfill(dim).ffill(dim)
-    idx = [slice(None)] * len(data.dims)
-    axis = data.dims.index(dim)
-    n = data.coords[dim].size
-    idx[axis] = slice(0, n-1)
-    data.values[tuple(idx)] = (np.diff(data.values) != 0)
-    idx[axis] = n-1
-    data.values[tuple(idx)] = 0
-    data = data.rolling(center=True, **{dim: window}).mean().rolling(center=True, **{dim: window}).sum()
-    data /= 2
-    data = data.fillna(0)
+    if as_event:
+        idx = [slice(None)] * len(data.dims)
+        axis = data.dims.index(dim)
+        n = data.coords[dim].size
+        idx[axis] = slice(0, n-1)
+        data.values[tuple(idx)] = (np.diff(data.values) != 0)
+        idx[axis] = n-1
+        data.values[tuple(idx)] = 0
+        data = data.rolling(center=True, **{dim: window}).mean().rolling(center=True, **{dim: window}).sum()
+        data /= 2
+        data = data.fillna(0)
     return data
 
 

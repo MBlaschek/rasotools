@@ -4,6 +4,10 @@ import numpy as np
 from . import dep
 from ..fun import message, check_kw
 from ..fun.cal import nancount
+from ..met.convert import _conform as conform
+
+np.seterr(invalid='ignore')
+
 
 __all__ = ['mean', 'percentile', 'percentile_reference']
 
@@ -50,7 +54,6 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
         else:
             ip = breaks[i + 1]  # later
 
-        # print(i, im, ib)
         # Slices all axes
         iref = slice(ib, ip)
         isample = slice(im, ib)
@@ -70,21 +73,19 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
                                      max_sample=max_sample,
                                      borders=borders, ratio=ratio, **kwargs)
         #
-        # Border zone (- borders, + borders)
-        # todo: some error? values do not match
+        # Border zone (Break, Break + borders)
+        # Linear interpolation
+        #
         if borders > 0:
-            left = slice(ib - borders, ib)
-            right = slice(ib, ib + borders)
-            left = idx2shp(left, axis, dshape)
-            right = idx2shp(right, axis, dshape)
-            if meanvar:
-                data[left] = dep.meanvar(data[iref], data[left], axis=axis, sample_size=3, borders=0, **kwargs)
-                data[right] = dep.meanvar(data[iref], data[right], axis=axis, sample_size=3, borders=0, **kwargs)
+            zone = slice(ib, ib + borders)
+            zone = idx2shp(zone, axis, dshape)
+            linzone = conform(np.linspace(0, 1, data[zone].shape[axis]), data[zone].shape)
+            if ratio:
+                zsample = np.nanmean(data[isample], axis=axis) / np.nanmean(data[iref], axis=axis)
+                data[zone] = data[zone] * linzone * zsample
             else:
-                data[left] = dep.mean(data[iref], data[left], axis=axis, sample_size=3, borders=0, ratio=ratio,
-                                      **kwargs)
-                data[right] = dep.mean(data[iref], data[right], axis=axis, sample_size=3, borders=0, ratio=ratio,
-                                       **kwargs)
+                zsample = np.nanmean(data[isample], axis=axis) - np.nanmean(data[iref], axis=axis)
+                data[zone] = data[zone] + linzone * zsample
 
         # Debug infos
         if check_kw('verbose', value=2, **kwargs):
@@ -280,23 +281,24 @@ def percentile_reference(xdata, ydata, breaks, axis=0, percentilen=None, sample_
             ip = breaks[i + 1]  # later
 
         # slices all axes
-        iref = slice(ib, ip)
-        isample = slice(im, ib)
+        iref = slice(ib, ip)  # B part
+        isample = slice(im, ib)  # A part
         isample = idx2shp(isample, axis, dshape)
         iref = idx2shp(iref, axis, dshape)
 
         before = np.nanmean(xdata[isample], axis=axis)
         #
-        # Use same sample for both data, apply to xdata
+        # Use same sample for both data
+        # compare xdata to ydata (REF)
         #
-        # xdata, ydata ?
         xdata[isample] = dep.percentile(ydata[isample], xdata[isample], percentilen,
                                         axis=axis,
                                         sample_size=sample_size,
                                         borders=borders,
                                         max_sample=max_sample,
                                         ratio=ratio,
-                                        apply=xdata[isample])
+                                        **kwargs
+                                        )
         # Debug infos
         if check_kw('verbose', value=2, **kwargs):
             sdata = stats(xdata, iref, isample, axis=axis, a=before)

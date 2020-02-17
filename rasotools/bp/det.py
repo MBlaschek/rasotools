@@ -48,10 +48,10 @@ def detector_ensemble(data, axis=0, ndist=None, nthres=None, nlevels=None, **kwa
         for i in nlevels:
             tmp += detector(data, axis=axis, min_levels=i, **kwargs)
 
-    return tmp #2*(tmp / np.max(tmp))  # (1)
+    return tmp  # 2*(tmp / np.max(tmp))  # (1)
 
 
-def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, use_first=False, **kwargs):
+def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, use_first=False, use_exp=False, **kwargs):
     """ Detect breakpoints given some parameters
 
     Args:
@@ -80,22 +80,22 @@ def detector(data, axis=0, dist=365, thres=50, min_levels=3, use_slopes=False, u
         ibreak = jbreak * np.sum(data, axis=1 if axis == 0 else 0)
 
     else:
-        ibreak = data * breaks   # truncate at threshold
+        ibreak = data * breaks  # truncate at threshold
 
     # find local maxima (within distance)
     if use_slopes:
-        imax = local_maxima(np.diff(ibreak), dist=dist)
+        imax = local_maxima(np.diff(ibreak), dist=dist, exp=use_exp)
 
     elif use_first:
         # find the beginning of breakpoint
-        imax = local_maxima(ibreak, dist=dist)  # Maximum
+        imax = local_maxima(ibreak, dist=dist, exp=use_exp)  # Maximum
         ifirst = []
         for i in imax:
-            ifirst += [i + np.argmin(ibreak[i:i+dist])]
+            ifirst += [i + np.argmin(ibreak[i:i + dist])]
         imax = ifirst
 
     else:
-        imax = local_maxima(ibreak, dist=dist)
+        imax = local_maxima(ibreak, dist=dist, exp=use_exp)
 
     if len(imax) > 0:
         imax = np.asarray(imax)
@@ -212,13 +212,19 @@ def numba_snhtmov(t, tsa, snhtparas, count, tmean, tsquare):
 
 
 @njit
-def local_maxima(x, dist=365):
+def local_maxima(x, dist=365, exp=False):
     maxima = []  # Leere Liste
     # Iteriere von 2 bis vorletzten Element
+    if exp:
+        weights = np.interp(np.arange(dist - 1), [0, dist // 2, dist - 2], [1, 1, 0.5])
+    else:
+        weights = np.ones(dist - 1)
+
     # ist iterator integer
     for i in range(dist, len(x) - dist):
         # Element davor und danach größer
-        if np.all((x[i] > x[slice(i + 1, i + dist)])) and np.all((x[slice(i - dist, i)] < x[i])):
+        if np.all((x[i] > x[slice(i + 1, i + dist)] * weights)) and np.all(
+                (weights[::-1] * x[slice(i - dist+1, i)] < x[i])):
             maxima.append(i)
     return maxima
 
@@ -229,7 +235,7 @@ def local_minima(x, dist=365):
     # Iteriere von 2 bis vorletzten Element
     # ist iterator integer
     for i in range(dist, len(x) - dist):
-        # Element davor und danach größer
+        # Element davor und danach größer / zwei Spitzen können aber durch viel nix getrennt sein
         if np.all((x[i] < x[slice(i + 1, i + dist)])) and np.all((x[slice(i - dist, i)] > x[i])):
             minima.append(i)
     return minima

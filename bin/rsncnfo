@@ -21,6 +21,9 @@ def color_boolean(x):
         return "\033[91m %r \033[0m" % x
 
 
+# todo add groups
+
+
 def header(f):
     print("Dimensions: ")
     for idim in f.dimensions:

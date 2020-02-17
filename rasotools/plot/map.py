@@ -170,10 +170,10 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
     ax = plt.axes(projection=projection)
 
     if ocean:
-        ax.add_feature(cpy.feature.OCEAN, zorder=0)
+        ax.add_feature(cpy.feature.OCEAN, zorder=0, facecolor=kwargs.get('ocean_facecolor', cpy.feature.COLORS['water']))
 
     if land:
-        ax.add_feature(cpy.feature.LAND, zorder=0)
+        ax.add_feature(cpy.feature.LAND, zorder=0, facecolor=kwargs.get('land_facecolor', cpy.feature.COLORS['land']))
 
     if coastlines:
         ax.coastlines()
@@ -186,7 +186,7 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
         labels = np.asarray(labels)
 
     if values is None:
-        ax.scatter(lon, lat, s=markersize, c=kwargs.get('color', 'r'), transform=projection, zorder=10,
+        ax.scatter(lon, lat, s=markersize, c=kwargs.get('color', 'r'), transform=cpy.crs.PlateCarree(), zorder=10,
                    edgecolor='k')  # ontop
     else:
         if posneg:
@@ -200,8 +200,9 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
 
             norm = BoundaryNorm(colorlevels, cmap.N)
 
-        cs = ax.scatter(lon, lat, s=markersize, c=values,
-                        transform=projection,
+        idx = np.isfinite(values)
+        cs = ax.scatter(lon[idx], lat[idx], s=markersize, c=values[idx],
+                        transform=cpy.crs.PlateCarree(),
                         zorder=10,
                         cmap=cmap,
                         edgecolor='k',
@@ -222,7 +223,7 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
 
         if np.isfinite(values).sum() != np.size(values):
             itx = ~np.isfinite(values)
-            ax.scatter(lon[itx], lat[itx], s=markersize, marker='s', c='w', transform=projection, zorder=9,
+            ax.scatter(lon[itx], lat[itx], s=markersize, marker='s', c='w', transform=cpy.crs.PlateCarree(), zorder=9,
                        edgecolor='k')
 
     if labels is not None:
@@ -231,7 +232,7 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
 
         for i, j, l, k in zip(lon, lat, labels, lloffset):
             ax.text(i + k, j, str(l), horizontalalignment='left', verticalalignment='top',
-                    transform=projection, fontsize=kwargs.get('fontsize', 8), zorder=12,
+                    transform=cpy.crs.PlateCarree(), fontsize=kwargs.get('fontsize', 8), zorder=12,
                     clip_on=True)
 
     if grid:
@@ -264,7 +265,7 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
         ax.set_ylabel(kwargs.get('ylabel'))
 
     if extent is not None:
-        ax.set_extent(extent, crs=projection)
+        ax.set_extent(extent, crs=cpy.crs.PlateCarree())
 
     return ax
 

@@ -25,6 +25,8 @@ def var(data, dim='plev', ax=None, logy=False, yticklabels=None, showna=False, *
         levels = levels.astype(float) / 100.
         message('Converting', lev_units, 'to', 'hPa', levels, **kwargs)
         lev_units = 'hPa'
+        if yticklabels is not None:
+            yticklabels = np.int_(np.asarray(yticklabels) / 100)
 
     itx = np.isfinite(values)
 
@@ -42,9 +44,8 @@ def var(data, dim='plev', ax=None, logy=False, yticklabels=None, showna=False, *
 
     if np.diff(ax.get_ylim())[0] > 0:
         ax.invert_yaxis()
-    ax.set_ylim(*kwargs.get('ylim', (None, None)))  # fixed
-    ax.set_xlim(*kwargs.get('xlim', (None, None)))
-    ax.set_yticks(levels, minor=True)
+
+    ax.set_yticks(levels)
     if yticklabels is not None:
         yticklabels = np.asarray(yticklabels)  # can not calc on list
         ax.set_yticks(yticklabels)
@@ -52,6 +53,9 @@ def var(data, dim='plev', ax=None, logy=False, yticklabels=None, showna=False, *
     else:
         ax.set_yticks(levels[::2])
         ax.set_yticklabels(np.int_(levels[::2]))
+
+    ax.set_ylim(*kwargs.get('ylim', (None, None)))  # fixed
+    ax.set_xlim(*kwargs.get('xlim', (None, None)))
     return ax
 
 
@@ -85,6 +89,8 @@ def winds(data, u='u', v='v', dim='plev', barbs=True, ax=None, logy=False, ytick
         levels = levels.astype(float) / 100.
         message('Converting', lev_units, 'to', 'hPa', levels, **kwargs)
         lev_units = 'hPa'
+        if yticklabels is not None:
+            yticklabels = np.int_(np.asarray(yticklabels) / 100)
 
     itx = np.isfinite(uvalues) & np.isfinite(vvalues)
 
@@ -113,8 +119,6 @@ def winds(data, u='u', v='v', dim='plev', barbs=True, ax=None, logy=False, ytick
     if np.diff(ax.get_ylim())[0] > 0:
         ax.invert_yaxis()
 
-    ax.set_ylim(*kwargs.get('ylim', (None, None)))  # fixed
-    ax.set_xlim(*kwargs.get('xlim', (None, None)))
     ax.set_yticks(levels, minor=True)
     if yticklabels is not None:
         yticklabels = np.asarray(yticklabels)  # can not calc on list
@@ -123,10 +127,13 @@ def winds(data, u='u', v='v', dim='plev', barbs=True, ax=None, logy=False, ytick
     else:
         ax.set_yticks(levels[::2])
         ax.set_yticklabels(np.int_(levels[::2]))
+    ax.set_ylim(*kwargs.get('ylim', (None, None)))  # fixed
+    ax.set_xlim(*kwargs.get('xlim', (None, None)))
     return ax
 
 
 def boxplot(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False, **kwargs):
+    import numpy as np
     import pandas as pd
     from xarray import DataArray
     import matplotlib.pyplot as plt
@@ -153,6 +160,8 @@ def boxplot(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False,
     if lev_units == 'Pa':
         levels = levels.astype(float) / 100.
         lev_units = 'hPa'
+        if yticklabels is not None:
+            yticklabels = np.int_(np.asarray(yticklabels) / 100)
 
     levels = levels.astype(int)
     if axis == 0:
@@ -174,19 +183,22 @@ def boxplot(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False,
     if logy:
         ax.set_yscale('log')
 
-    ax.set_xlim(*kwargs.get('xlim', (None, None)))
-
     if yticklabels is not None:
-        for label in ax.yaxis.get_ticklabels():
-            if int(label.get_text()) not in yticklabels:
-                label.set_visible(False)
+        yticklabels = np.asarray(yticklabels)  # can not calc on list
+        ax.set_yticks(yticklabels)
+        ax.set_yticklabels(np.int_(yticklabels))
+        # for label in ax.yaxis.get_ticklabels():
+        #     if int(label.get_text()) not in yticklabels:
+        #         label.set_visible(False)
     # else:
     #     for label in ax.yaxis.get_ticklabels()[::2]:
     #         label.set_visible(False)
+    ax.set_ylim(*kwargs.get('ylim', (None, None)))  # fixed
+    ax.set_xlim(*kwargs.get('xlim', (None, None)))
     return ax
 
 
-def bars(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False, bar_kwargs={}, **kwargs):
+def bars(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False, use_levels=False, bar_kwargs={}, **kwargs):
     import numpy as np
     from xarray import DataArray
     import matplotlib.pyplot as plt
@@ -213,9 +225,13 @@ def bars(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False, ba
     levels = levels.astype(int)
     set_labels(kwargs, xlabel=get_info(data),
                title=get_info(data), ylabel=dim + ' [%s]' % lev_units)
+    if use_levels:
+        ax.barh(levels, data.values, align='center', **bar_kwargs)
+        # ax.set_yticklabels([str(i) for i in levels])
+    else:
+        ax.barh(np.arange(1, levels.size+1), data.values, align='center', **bar_kwargs)
+        ax.set_yticklabels([str(i) for i in levels])
 
-    ax.barh(np.arange(1, levels.size+1), data.values, align='center', **bar_kwargs)
-    ax.set_yticklabels([str(i) for i in levels])
     if logy:
         ax.set_yscale('log')
 
@@ -229,7 +245,6 @@ def bars(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False, ba
     ax.set_title(kwargs.get('title'))
     ax.set_ylabel(kwargs.get('ylabel'))
     ax.set_xlabel(kwargs.get('xlabel'))
-    ax.set_xlim(*kwargs.get('xlim', (None, None)))
 
     if yticklabels is not None:
         for label in ax.yaxis.get_ticklabels():
@@ -238,4 +253,6 @@ def bars(data, dim='plev', ax=None, vline=None, yticklabels=None, logy=False, ba
     # else:
     #     for label in ax.yaxis.get_ticklabels()[::2]:
     #         label.set_visible(False)
+    ax.set_ylim(*kwargs.get('ylim', (None, None)))  # fixed
+    ax.set_xlim(*kwargs.get('xlim', (None, None)))
     return ax

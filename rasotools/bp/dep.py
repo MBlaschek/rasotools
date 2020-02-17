@@ -122,7 +122,7 @@ def meanvar(sample1, sample2, axis=0, sample_size=130, borders=0, max_sample=146
 
 
 def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0, max_sample=1460, ratio=True,
-               apply=None, **kwargs):
+               apply=None, noise=False,**kwargs):
     """ Adjustment method using percentile differences or ratios
 
     ratio=False
@@ -153,8 +153,23 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
     # nsample2 = np.isfinite(dataset[sample2]).sum(axis=axis) > sample_size
 
     # Percentiles of the samples
-    # s1 = np.nanpercentile(dataset[sample1], percentiles, axis=axis)
-    # s2 = np.nanpercentile(dataset[sample2], percentiles, axis=axis)
+    # if special:
+    #s1 = np.rollaxis(np.nanpercentile(sample1, percentiles, axis=axis),0, axis)
+    #s2 = np.rollaxis(np.nanpercentile(sample2, percentiles, axis=axis),0, axis)
+    #print(s1.shape)
+    #print(s1[:, 0, 5])
+    #print(s2[:, 0, 5])
+    # else:
+    #
+    # Percentiles can be duplicated (because DPD might be integers)
+    # limit calculations by sample_size, max_sample, borders
+    #
+    #     (part A)    |    (part B)
+    #               break
+    #             >borders<
+    #  <max sample         max sample>
+    #
+    # (part B)
     s1 = nanfunc(sample1,
                  axis=axis,
                  n=sample_size,
@@ -162,7 +177,7 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
                  ffunc=np.nanpercentile,
                  borders=borders,
                  fargs=(percentiles,))
-
+    # flip means that beginning from the back (part A)
     s2 = nanfunc(sample2,
                  axis=axis,
                  n=sample_size,
@@ -171,30 +186,25 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
                  borders=borders,
                  fargs=(percentiles,),
                  flip=True)
+
+    # print(s1.shape)
+    # print(s1[0, :, 5])
+    # print(s2[0, :, 5])
+
     if ratio:
-        # dep = np.where(sample2 != 0., sample1 / sample2, 1.)
         dep = np.divide(s1, s2, where=(s2 != 0), out=np.full(s2.shape, 1.))
-        # dep = np.where(nsample1 & nsample2, dep, 1.)  # apply sample size
         dep = np.where(np.isfinite(dep), dep, 1.)  # replace NaN
     else:
         dep = s1 - s2
-        # dep = np.where(nsample1 & nsample2, dep, 0.)  # apply sample size
         dep = np.where(np.isfinite(dep), dep, 0.)
 
-    # Interpolate adjustments to sampleout shape and dataset
+    # Interpolate adjustments
     if apply is None:
-        dep = apply_percentile_adjustments(sample2, s2, dep, axis=axis)
+        apply = sample2.copy()
+    else:
+        apply = apply.copy()
 
-        if ratio:
-            dep = np.where(np.isfinite(dep), dep, 1.)
-            sample2 *= dep
-        else:
-            dep = np.where(np.isfinite(dep), dep, 0.)
-            sample2 += dep
-
-        return sample2
-
-    dep = apply_percentile_adjustments(apply, s2, dep, axis=axis)
+    dep = apply_percentile_adjustments(apply, s2, dep, axis=axis, noise=noise)
 
     if ratio:
         dep = np.where(np.isfinite(dep), dep, 1.)
@@ -202,7 +212,7 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
     else:
         dep = np.where(np.isfinite(dep), dep, 0.)
         apply += dep
-
+    
     return apply
 
 
@@ -211,7 +221,7 @@ def percentile(sample1, sample2, percentiles, axis=0, sample_size=130, borders=0
 #
 
 
-def apply_percentile_adjustments(data, percentiles, adjustment, axis=0):
+def apply_percentile_adjustments(data, percentiles, adjustment, axis=0, noise=False):
     """ Helper Function for applying percentile adjustments
 
     Args:
@@ -225,16 +235,29 @@ def apply_percentile_adjustments(data, percentiles, adjustment, axis=0):
     """
     in_dims = list(range(data.ndim))
     # last dim == axis, Last dim should be time/date
+    # print(data.shape)
     data = np.transpose(data, in_dims[:axis] + in_dims[axis + 1:] + [axis])
+    # print(data.shape)
     percentiles = np.transpose(percentiles, in_dims[:axis] + in_dims[axis + 1:] + [axis])
     adjustment = np.transpose(adjustment, in_dims[:axis] + in_dims[axis + 1:] + [axis])
+    # print(percentiles.shape, adjustment.shape)
     adjusts = np.zeros(data.shape)
     # Indices for iteration + expand
     inds = np.ndindex(data.shape[:-1])  # iterate all dimensions but last
     inds = (ind + (Ellipsis,) for ind in inds)  # add last as ':' == Ellipsis == all
+    # k = 0
     for ind in inds:
         # INTERP -> Xnew, Xpoints, Fpoints
-        adjusts[ind] = np.interp(data[ind], percentiles[ind], adjustment[ind], left=np.nan, right=np.nan)
+        iperc, idx = np.unique(percentiles[ind], return_index=True)
+        iadj = adjustment[ind][idx]
+        if noise:
+            adjusts[ind] = np.interp(data[ind] + np.random.normal(size=data[ind].size, scale=0.5), iperc, iadj, left=np.nan, right=np.nan)
+        else:
+            adjusts[ind] = np.interp(data[ind], iperc, iadj, left=np.nan,
+                                     right=np.nan)
+        # if k == 5:
+        #     print(ind, data[ind], adjusts[ind], iperc, iadj)
+        # k+=1
 
     # Transform back to original shape
     return np.transpose(adjusts, in_dims[:axis] + in_dims[axis + 1:] + [axis])

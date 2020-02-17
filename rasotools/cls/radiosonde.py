@@ -45,7 +45,7 @@ class Radiosonde(object):
         if key in self.data:
             delattr(self.data, key)
 
-    def add(self, name, filename=None, directory=None, rename=None, cfunits=False, close=False, xwargs=None, **kwargs):
+    def add(self, name, filename=None, directory=None, rename=None, cfunits=False, close=True, xwargs=None, **kwargs):
         """ Add dataset to radiosonde class object [container]
 
         Args:

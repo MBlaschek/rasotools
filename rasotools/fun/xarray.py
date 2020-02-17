@@ -83,8 +83,14 @@ def limits(data, var, raw):
     from xarray import Dataset
     if not isinstance(data, Dataset):
         raise ValueError("Requires an Xarray Dataset", type(data))
-
-    data[var].values = np.where(((data[var].values < 0) | np.isnan(data[var])), data[raw].values, data[var].values)
+    with np.errstate(invalid='ignore'):
+        #
+        # values below 0 or missing -> reset to original
+        #
+        logic = ((data[var].values < 0) | np.isnan(data[var]))
+        data[var].values = np.where(logic,
+                                    data[raw].values,
+                                    data[var].values)
 
 
 def update_shape(data, order):
@@ -139,7 +145,7 @@ def array_to_dataset(data, dim, rename=None):
     return data
 
 
-def table_to_dataset(data, dim='time', plev='plev', levels=None, **kwargs):
+def table_to_dataset(data, dim='time', plev='plev', levels=None, return_rejected=False, **kwargs):
     """ Convert pandas Dataframe to xarray Dataset
 
     Args:
@@ -162,7 +168,7 @@ def table_to_dataset(data, dim='time', plev='plev', levels=None, **kwargs):
     varis = [dim, plev]
     attrs = None
     if isinstance(data, Dataset):
-        # copy attributes
+        # copy / backup attributes
         attrs = data.attrs.copy()
         tatts = data[dim].attrs
         vatt = {i: data[i].attrs.copy() for i in data.data_vars}
@@ -170,6 +176,7 @@ def table_to_dataset(data, dim='time', plev='plev', levels=None, **kwargs):
         # to pandas dataframe
         #
         data = data.to_dataframe()
+        data.index.name = dim
 
     #
     # select only valid levels
@@ -191,6 +198,11 @@ def table_to_dataset(data, dim='time', plev='plev', levels=None, **kwargs):
         data[dim].attrs.update(tatts)
 
     return data
+
+
+def dataset_to_table():
+    # reverse function, with merging old not selected old data
+    pass
 
 
 def combine_datasets(a, b, subset=None, suffix=None, only2a=True, profiles=True, plev='plev', **kwargs):

@@ -237,6 +237,7 @@ adjustments these with a mean  adjustment going back in time.
         breakname (str): Name of variable with breakpoint information
         dim (str): datetime dimension
         suffix (str): add to name of new variables
+        ratio (bool): differences or ratios?
 
     Optional Args:
         sample_size (int):  minimum Sample size [130]
@@ -276,7 +277,7 @@ adjustments these with a mean  adjustment going back in time.
     ff.message(ff.dict2str(params), **ff.levelup(**kwargs))
     stdn = data[name].attrs.get('standard_name', name)
 
-    data[name + suffix] = (idata.dims, adj.mean(values, breaks, axis=axis, **kwargs))
+    data[name + suffix] = (idata.dims, adj.mean(values, breaks, axis=axis, ratio=ratio, **kwargs))
     data[name + suffix].attrs.update(params)
     data[name + suffix].attrs['biascor'] = 'mean'
     if 'niter' in data[name + suffix].attrs:
@@ -374,7 +375,7 @@ adjustments these with a mean and a percentile adjustment going back in time.
         dim (str): datetime dimension
         suffix (str): add to name of new variables
         percentilen (list): percentilen
-        
+        adjust_reference (bool): return adjusted reference?
 
     Optional Args:
         sample_size (int):  minimum Sample size [130]
@@ -428,9 +429,21 @@ adjustments these with a mean and a percentile adjustment going back in time.
     #
     if adjust_reference:
         avalues = adj.percentile_reference_period(values, avalues, breaks, axis=axis, percentilen=percentilen, **kwargs)
-
-    values = adj.percentile_reference(values, avalues, breaks, axis=axis, percentilen=percentilen, **kwargs)
-
+    #
+    # Adjust according to reference dataset
+    #
+    if False:
+        values = adj.percentile_reference(values, avalues, breaks, axis=axis, percentilen=percentilen, **kwargs)
+    else:
+        #
+        # use adjusted era as reference and calculate departures -> adj departures
+        #
+        values = values - avalues
+        values = adj.percentile(values, breaks, axis=axis, percentilen=percentilen, **kwargs)
+        values = values + avalues
+        ff.message(name, 'using QA-adj departures', **kwargs)
+        # values = adj.percentile_reference(values, avalues, breaks, axis=axis, percentilen=percentilen, **kwargs)
+        
     data[name + suffix] = (data[name].dims, values)
     data[name + suffix].attrs.update(params)
     data[name + suffix].attrs['biascor'] = 'percentil_ref'
@@ -908,32 +921,41 @@ def reference_period(data, dim='time', dep_var=None, period=None, **kwargs):
     return None
 
 
-def apply_metadata(data, dim='time', window=30,
-                   lon='lon', lat='lat', distance_weight=1, distance_threshold=10,
+def combine_metadata(data, dim='time', window=30,
+                   lon=None, lat=None, distance_weight=1, distance_threshold=10,
                    read_igra=True, meta_ident=None, meta_weight=1,
-                   stype='sonde_type', sonde_weight=1, **kwargs):
-    from .meta import location_change, metadata
+                   stype=None, sonde_weight=1, **kwargs):
+    from .meta import location_change, metadata, sondetype
     if not isinstance(data, Dataset):
         raise ValueError()
 
-    if lon in data.data_vars and lat in data.data_vars:
+    # can be redundant
+
+
+    if lon is not None and lat is not None:
         # distance in [km] of location changes
-        distance = location_change(data[lon], data[lat], dim=dim, **kwargs)
-        distance.values = np.where(distance.values > distance_threshold, distance_weight, 0)
+        dinfo = location_change(lon, lat, dim=dim, **kwargs)
+        dinfo.values = np.where(dinfo.values > distance_threshold, distance_weight, 0)
         # triangle shape
-        distance = distance.rolling(**{dim: window}, min_periods=1, center=True).sum().rolling(**{dim: window},
+        dinfo = dinfo.rolling(**{dim: window}, min_periods=1, center=True).sum().rolling(**{dim: window},
                                                                                                min_periods=1,
                                                                                                center=True).mean()
+    if stype is not None:
+        sinfo = sondetype(stype, dim, window=window, **kwargs)
 
     if read_igra:
         if meta_ident is None:
             raise ValueError('')
-        metadata(meta_ident, data[dim].values, dim=dim, window=window, **kwargs)
+        minfo = metadata(meta_ident, data[dim].values, dim=dim, window=window, **kwargs)
 
+    return data
 
 def apply_biasadjustments(adjdata, data, isodb=False, **kwargs):
     # calculate the bias adjustmens and for sounding times
     # interpolate between sounding times
     # interpolate to table format?
-
+    # todo finish that function
+    # cal. adjustments adjdata - data = adj
+    # interpolate?, unify across missing
+    # quantile adjustments ? how to interpolate these across unknown
     pass

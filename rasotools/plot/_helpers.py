@@ -61,7 +61,6 @@ def plot_arange(imin, m=None, p=0, n=7):
     values = np.round(values, p)
     return np.unique(np.sort(np.asarray(values))).tolist()
 
-
 def get_info(x):
     return x.attrs.get('standard_name', x.name if x.name is not None else 'var') + ' [' + x.attrs.get('units', '1') + ']'
 
@@ -71,7 +70,7 @@ def set_labels(known, **kwargs):
         known.update({ikey: known.get(ikey, ival)})
 
 
-def line(dates, values, title='', ylabel='', xlabel='', xerr=None, yerr=None, filled=False, ax=None, **kwargs):
+def line(dates, values, title='', ylabel='', xlabel='', xerr=None, yerr=None, filled=False, minmax=False, ax=None, **kwargs):
     """
 
     Args:
@@ -108,9 +107,9 @@ def line(dates, values, title='', ylabel='', xlabel='', xerr=None, yerr=None, fi
                 lw=kwargs.get('lw', 1),
                 label=kwargs.get('label', None),
                 marker=kwargs.get('marker', None),
-                alpha=kwargs.get('alpha', 1),
+                # alpha=kwargs.get('alpha', 1),
                 color=kwargs.get('color', None))  # Line Plot
-        low, high = lowhigh(dates, values, xerr=xerr, yerr=yerr)
+        low, high = lowhigh(dates, values, xerr=xerr, yerr=yerr, minmax=minmax)
         if xerr is None:
             ax.fill_between(dates, low, high,
                             alpha=kwargs.get('alpha', 0.5),
@@ -140,19 +139,27 @@ def line(dates, values, title='', ylabel='', xlabel='', xerr=None, yerr=None, fi
     return ax
 
 
-def lowhigh(dates, values, xerr=None, yerr=None):
+def lowhigh(dates, values, xerr=None, yerr=None, minmax=False):
     import numpy as np
     if xerr is None:
         if hasattr(yerr, '__iter__') and len(np.shape(yerr)) == 2:
-            low = values - yerr[0]
-            high = values + yerr[1]
+            if minmax:
+                low = yerr[0]
+                high = yerr[1]
+            else:
+                low = values - yerr[0]
+                high = values + yerr[1]
         else:
             low = values - yerr
             high = values + yerr
     else:
         if hasattr(xerr, '__iter__') and len(np.shape(xerr)) == 2:
-            low = dates - xerr[0]
-            high = dates + xerr[1]
+            if minmax:
+                low = xerr[0]
+                high = xerr[1]
+            else:
+                low = dates - xerr[0]
+                high = dates + xerr[1]
         else:
             low = dates - xerr
             high = dates + xerr
@@ -265,3 +272,18 @@ def stats(data, dim='time'):
     std = data.std().values
     rmse = statistics(data, f='rmse', dim=dim).median().values
     return "R:{:.2f} M:{:.2f} S:{:.2f}".format(rmse, med, std)
+
+
+def discrete_colormap(values, cmap='jet'):
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    cmap = plt.get_cmap(cmap)  # define the colormap
+    # extract all colors from the .jet map
+    cmaplist = [cmap(i) for i in range(cmap.N)]
+    # create the new map
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(
+        'Custom cmap', cmaplist, cmap.N)
+
+    # define the bins and normalize
+    norm = mpl.colors.BoundaryNorm(values, cmap.N)
+    return cmap, norm

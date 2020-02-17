@@ -83,11 +83,15 @@ def summary(data, dim='time', thres=None, ax=None, **kwargs):
                    title=get_info(data), ylabel='Sum (' + ",".join([get_info(data[i]) for i in idims]) + ')')
 
         ax = line(data[dim].values, data.sum(idims).values, ax=ax, **kwargs)
-        ax.set_ylim(0, 5000)
+        ax.set_ylim(0, 4000)
+        ax.set_yticks(np.arange(0, 4001, 1000, dtype=int))
         if thres is not None:
             ay = ax.twinx()
-            ay = line(data[dim].values, (data >= thres).sum(idims).values, ax=ay, color=kwargs.pop('color', 'r'))
-            ay.set_yticks(np.linspace(ay.get_yticks()[0], ay.get_yticks()[-1], len(ax.get_yticks())))
+            ay = line(data[dim].values, (data >= thres).sum(idims).values, ax=ay, color=kwargs.get('color', 'r'))
+            ay.set_yticks(np.linspace(ay.get_yticks()[-1], ay.get_yticks()[0], len(ax.get_yticks())))
+            ay.spines['right'].set_color(kwargs.get('color', 'r'))
+            ay.yaxis.label.set_color(kwargs.get('color', 'r'))
+            ay.tick_params(axis='y', colors=kwargs.get('color', 'r'))
             return ax, ay
     else:
         set_labels(kwargs, xlabel=get_info(data[dim]),
@@ -115,7 +119,7 @@ def var(data, dim='time', lev=None, colorlevels=None, logy=False, yticklabels=No
     Returns:
 
     """
-    from ._helpers import line, contour, get_info, set_labels, stats
+    from ._helpers import line, contour, get_info, set_labels, stats, plot_arange as pa, plot_levels as pl
 
     if not isinstance(data, DataArray):
         raise ValueError('Requires a DataArray', type(data))
@@ -224,13 +228,13 @@ def snht(data, snht_var, break_var, dim='time', lev='plev', thres=50, **kwargs):
     """
     from . import init_fig_vertical
     f, ax = init_fig_vertical(**kwargs)
-    _, cs = threshold(data[snht_var], dim=dim, lev=lev, ax=ax[1], logy=False, legend=False, **kwargs)
+    _, cs = threshold(data[snht_var], dim=dim, lev=lev, ax=ax[1], legend=False, **kwargs)
     ax[1].set_title('')
     if break_var is not None:
-        breakpoints(data[break_var], ax=ax[1], color='k', dim=dim)
+        breakpoints(data[break_var], ax=ax[1], color='k', dim=dim, lw=2)
     summary(data[snht_var], dim=dim, thres=thres, ax=ax[0], xlabel='', ylabel='Sum SNHT', **kwargs)
     if break_var is not None:
-        breakpoints(data[break_var], ax=ax[0], color='k', dim=dim)
+        breakpoints(data[break_var], ax=ax[0], color='k', dim=dim, lw=2)
     f.get_axes()[2].set_ylabel('Sum sign. Levs')
     f.subplots_adjust(right=0.9)
     cax = f.add_axes([0.91, 0.15, 0.015, 0.5])
@@ -243,3 +247,9 @@ def snht(data, snht_var, break_var, dim='time', lev='plev', thres=50, **kwargs):
     #     for i in lower:
     #         eval('ax[1]' + i)
     return f, ax
+
+
+def _pq(data):
+    # Plot levels qith quantiles
+    from ._helpers import plot_arange
+    return plot_arange(*data.quantile([0.05,0.95]).values)

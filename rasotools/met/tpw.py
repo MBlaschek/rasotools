@@ -37,6 +37,13 @@ def tpw(values, pin, axis=0, min_levels=8, fill_nan=True):
     return values
 
 
+def iwv(values, pin, axis=0, min_levels=8, fill_nan=True):
+    #
+    # Pa * Pa
+    # N / m2
+    #
+    return values
+
 def dpres(p, sfc=101300., top=1000.):
     """Calculate delta p intervals for integration
     Copy from NCL function dpres

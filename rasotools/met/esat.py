@@ -30,6 +30,7 @@ def svp(t, method='HylandWexler', p=None, **kwargs):
     Args:
         t: air temperature
         method: string or function
+        p: pressure
         **kwargs: additional keywords passed to function
 
     Returns:
@@ -58,13 +59,15 @@ def reference_table():
     print(""" This dataset has been calculated by Murphy and Koop (2005)
     and can be used as reference dataset for saturation water vapor pressure.
     IAPWS 97 Values give:
-     T (C)   Es (Pa)
-    -60.00  1.0813475449
-    -30.00  38.005139487
-      0.00  611.15347506
-     30.00  4246.6883405
-     60.00  19945.801925
+     T (K)   Es (Pa)
+    213.15  1.0813475449
+    243.15  38.005139487
+    273.15  611.15347506
+    303.15  4246.6883405
+    333.15  19945.801925
     """)
+    tx = np.asarray([-60, -30, 0, 30, 60]) + 273.15
+    ex = np.asarray([1.0813475449, 38.005139487, 611.15347506, 4246.6883405, 19945.801925])
     t = np.asarray([150, 180, 210, 240, 273.15, 273.16, 300])
     ei = np.asarray([6.106e-6, 0.0053975, 0.70202, 27.272, 611.154, 611.657, np.nan])
     ew = np.asarray([1.562e-5, 0.011239, 1.2335, 37.667, 611.213, 611.657, 3536.8])
@@ -274,7 +277,7 @@ def Goff1957(temp, over_ice=False, over_water=True, **kwargs):
     elif over_ice:
         return 10 ** ice(temp)
     else:
-        return np.where(temp<273.16, 10 ** ice(temp), 10 ** liquid(temp))
+        return np.where(temp < 273.16, 10 ** ice(temp), 10 ** liquid(temp))
 
 
 def Goff1965(temp, over_water=True, over_ice=False, **kwargs):
@@ -344,6 +347,7 @@ def GoffGratch(temp, over_water=True, over_ice=False, **kwargs):
     Returns:
          es : saturation water vapor pressure in Pa
     """
+
     def liquid(t):
         return -7.90298 * ((373.16 / t) - 1) \
                + 5.02808 * np.log10(373.16 / t) \
@@ -532,8 +536,8 @@ def Tetens(t, over_water=True, over_ice=False, **kwargs):
         return 610.78 * np.exp(21.875 * (t - 273.16) / (t - 7.66))
     else:
         return np.where(t > 273.15,
-                    610.78 * np.exp(17.269 * (t - 273.16) / (t - 35.86)),
-                    610.78 * np.exp(21.875 * (t - 273.16) / (t - 7.66)))
+                        610.78 * np.exp(17.269 * (t - 273.16) / (t - 35.86)),
+                        610.78 * np.exp(21.875 * (t - 273.16) / (t - 7.66)))
 
 
 def Sonntag(temp, over_water=True, over_ice=False, **kwargs):
@@ -698,19 +702,20 @@ def Wexler(temp, over_water=False, over_ice=False, **kwargs):
     Returns:
         es: saturation water vapor pressure in Pa
     """
+
     def liquid(t):
         return -2991.27290 / t / t - 6017.0128 / t \
                + 18.87643854 - 0.028354721 * t \
-               + 0.17838301e-4 * t*t \
-               - 0.84150417e-9 * t*t*t \
-               + 0.44412543e-12 * t*t*t*t \
+               + 0.17838301e-4 * t * t \
+               - 0.84150417e-9 * t * t * t \
+               + 0.44412543e-12 * t * t * t * t \
                + 2.858487 * np.log(t)
 
     def ice(t):
         return -5865.3696 / t + 22.241033 \
                + 0.013749042 * t \
-               - 0.34031775e-4 * t*t \
-               + 0.26967687e-7 * t*t*t \
+               - 0.34031775e-4 * t * t \
+               + 0.26967687e-7 * t * t * t \
                + 0.6918651 * np.log(t)
 
     if over_water:
@@ -734,4 +739,3 @@ def Wright(t, **kwargs):
         es: saturation water vapor pressure in Pa
     """
     return 611.21 * np.exp(17.502 * (t - 273.15) / (240.97 + t - 273.15))
-

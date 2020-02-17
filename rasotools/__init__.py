@@ -13,8 +13,13 @@ Updated: %s
 
 import os as _os
 
-from . import cls
 from . import fun
+from . import cls
+from . import net
+from . import met
+from . import grid
+from . import bp
+from . import plot
 
 
 def _getlibs():

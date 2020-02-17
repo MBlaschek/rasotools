@@ -159,7 +159,7 @@ def make_process_list(iterable, function, args=(), **kwargs):
     return stuff
 
 
-def execute_process(iterable, npp=10, return_value=False, loop=False, progress=True, summary=True):
+def execute_process(iterable, npp=10, return_value=False, loop=False, progress=True, summary=True, extend=False):
     try:
         import tqdm
     except ImportError:
@@ -203,7 +203,10 @@ def execute_process(iterable, npp=10, return_value=False, loop=False, progress=T
     for i in res:
         if i.status and i.executed:
             ok.append(i.name)
-            results.append(i.value)
+            if extend:
+                results.extend(i.value)
+            else:
+                results.append(i.value)
         else:
             errors.append(i.name)
             print(i.error)

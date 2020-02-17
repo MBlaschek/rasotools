@@ -2,6 +2,11 @@
 import numpy as np
 from .esat import svp
 from ..fun.constants import eps
+#
+# common problem with missing values
+#
+np.seterr(invalid='ignore')
+
 
 __all__ = ['sh2ppmv', 'sh2vap', 'vap2sh', 'ppmv2pa', 'rh2vap', 'rh2ppmv', 'dewpoint', 'frostpoint']
 
@@ -359,7 +364,6 @@ def dewpoint_ECMWF(e, t=None, rh=None, **kwargs):
             raise ValueError('requires t and rh or e')
 
         e = svp(t, method='FOEEWMO') * rh
-
     lnpart = np.log(e / 611.21)
     return (17.502 * 273.16 - 32.19 * lnpart) / (17.502 - lnpart)
 

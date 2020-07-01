@@ -3,7 +3,8 @@
 __all__ = ['location_change', 'sondetype', 'metadata']
 
 
-def location_change(lon, lat, dim='time', ilon=None, ilat=None, **kwargs):
+def location_change(lon, lat, dim='time', ilon=None, ilat=None, as_event=True, distance_threshold=10, window=180,
+                    dates=None, **kwargs):
     """ Convert location change to breakpoint series
 
     Args:
@@ -12,10 +13,17 @@ def location_change(lon, lat, dim='time', ilon=None, ilat=None, **kwargs):
         dim (str): datetime dimension
         ilon (float): location longitude
         ilat (float): location latitude
+        as_event (bool): calculate location change as event (distance_threshold)
+        distance_threshold (float): distance threshold for events
+        window (int): event influence in days
         **kwargs:
 
     Returns:
         DataArray : distances between locations
+
+    Notes:
+        distance_threshold : degree 0.1 == 11.1 km, 0.01 == 1.1 km changes
+
     """
     import numpy as np
     from xarray import DataArray, full_like
@@ -35,7 +43,7 @@ def location_change(lon, lat, dim='time', ilon=None, ilat=None, **kwargs):
     lon = lon.bfill(dim)
     lat = lat.bfill(dim)
 
-    dist = full_like(lon, 0, dtype=float)
+    dist = full_like(lon, 0, dtype=np.float)
     dist.name = 'distance'
     dist.attrs['units'] = 'km'
     fdistance = np.vectorize(distance)
@@ -43,21 +51,40 @@ def location_change(lon, lat, dim='time', ilon=None, ilat=None, **kwargs):
     lon = lon.values.flatten()
     lat = lat.values.flatten()
     if ilon is None and ilat is None:
-        # distance between more recent and less recent
-        tmp = fdistance(lon[1:], lat[1:], lon[:-1], lat[:-1])
-        tmp = np.append(tmp, tmp[-1])
+        if lon.size > 1:
+            # distance between more recent and less recent
+            tmp = fdistance(lon[1:], lat[1:], lon[:-1], lat[:-1])
+            tmp = np.append(tmp, tmp[-1])
+        else:
+            tmp = np.array([0])
         dist.values = tmp.reshape(ishape)
-
         dist.attrs['method'] = 'Backwards'
     else:
         tmp = fdistance(lon, lat, ilon, ilat)
         dist.values = tmp.reshape(ishape)
         dist.attrs['method'] = 'Point(%f E, %f N)' % (ilon, ilat)
-    dist.attrs['standard_name'] = 'distance'
+
+    # Check for duplicates
+    if dist[dim].to_index().duplicated().any():
+        dist = dist.isel({dim: ~dist[dim].to_index().duplicated()})
+
+    if as_event:
+        dist.values = (dist > distance_threshold).astype(float) \
+            .rolling(center=True, min_periods=1, **{dim: window}).mean() \
+            .rolling(center=True, min_periods=1, **{dim: window}).sum()
+        dist.attrs['threshold'] = distance_threshold
+        dist.attrs['standard_name'] = 'location_change_point'
+        if dates is not None:
+            dist = dist.reindex(time=dates, method='nearest', fill_value=0)  # reindex
+    else:
+        dist.attrs['standard_name'] = 'distance'
+        if dates is not None:
+            dist = dist.reindex(time=dates, method='nearest').bfill(dim).ffill(dim)
+
     return dist
 
 
-def sondetype(data, dim='time', window=30, as_event=True, **kwargs):
+def sondetype(data, dim='time', window=30, as_event=True, dates=None, **kwargs):
     """ Make breakpoint series from sondetype changes
 
     Args:
@@ -76,18 +103,27 @@ def sondetype(data, dim='time', window=30, as_event=True, **kwargs):
         raise ValueError('requires a DataArray', type(data))
 
     data = data.copy()
-    data = data.bfill(dim).rolling(center=True, **{dim: window}).median().bfill(dim).ffill(dim)
+    # Check for duplicates
+    if data[dim].to_index().duplicated().any():
+        data = data.isel({dim: ~data[dim].to_index().duplicated()})
+
+    data = data.bfill(dim).rolling(center=True, min_periods=1, **{dim: window}).median().bfill(dim).ffill(dim)
     if as_event:
         idx = [slice(None)] * len(data.dims)
         axis = data.dims.index(dim)
         n = data.coords[dim].size
-        idx[axis] = slice(0, n-1)
+        idx[axis] = slice(0, n - 1)
         data.values[tuple(idx)] = (np.diff(data.values) != 0)
-        idx[axis] = n-1
+        idx[axis] = n - 1
         data.values[tuple(idx)] = 0
         data = data.rolling(center=True, **{dim: window}).mean().rolling(center=True, **{dim: window}).sum()
         data /= 2
         data = data.fillna(0)
+        if dates is not None:
+            data = data.reindex(time=dates, method='nearest', fill_value=0)  # reindex
+    else:
+        if dates is not None:
+            data = data.reindex(time=dates, method='nearest').bfill(dim).ffill(dim)  # fill missing values
     return data
 
 
@@ -129,6 +165,7 @@ def metadata(ident, dates, dim='time', window=30, **kwargs):
     igra.index = igra.index.tz_localize(tz=None)
     igra['message'] = igra['befinfo'] + ' ' + igra['link'] + ' ' + igra['aftinfo'] + ' ' + igra['comment']
     igra['message'] = igra['message'].str.strip()
+    # Find closest match to given dates
     for idate in (igra.index.tz_localize(tz=None)):
         logic = abs(data.index - idate) <= pd.Timedelta(30, unit='d')
         jdate = np.argmin(abs(data.index - idate))
@@ -146,18 +183,15 @@ def metadata(ident, dates, dim='time', window=30, **kwargs):
 
     data = data.drop('day', axis=1)
     data.index = data.index.tz_localize(tz=None)
-    message("[META] WMO", data['wmo_sondetype'].sum(), **kwargs)
+
     data['wmo_sondetype'] = data['wmo_sondetype'].replace(0, np.nan)
-    data['wmo_sondetype'] = data['wmo_sondetype'].replace(-1, np.nan)
-    data.loc[1:, 'wmo_event'] = (np.diff(data.wmo_sondetype.rolling(window=30, center=False).median().bfill().values) != 0).astype(int)
-    # data.loc[1:, 'wmo_event'] = (np.diff((data.wmo_sondetype.bfill().ffill()).values) != 0).astype(int)
+    data['wmo_sondetype'] = data['wmo_sondetype'].replace(-1, np.nan).astype(float)
     data.index.name = dim
     data = data.to_xarray()
-    # resample and normalize
-    data['wmo_event'] = data['wmo_event'].rolling(center=True, **{dim: window}).sum().rolling(center=True, **{dim: window}).mean()
-    data['wmo_event'] /= data['wmo_event'].max()
-    data['igra_event'] = data['igra_event'].rolling(center=True, **{dim: window}).sum().rolling(center=True, **{dim: window}).mean()
-    data['igra_event'] /= data['igra_event'].max()
+    data['wmo_event'] = sondetype(data['wmo_sondetype'], dim=dim, window=window, dates=dates)
+    data['igra_event'] = data['igra_event']\
+        .rolling(center=True, min_periods=1, **{dim: window}).mean()\
+        .rolling(center=True, min_periods=1, **{dim: window}).sum().fillna(0)
     return data
 
 

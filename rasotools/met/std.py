@@ -263,7 +263,7 @@ def align_datetime(data, dim='time', plev='plev', times=(0, 12), span=6, freq='1
     data['delay'].attrs['times'] = str(times)
     data['flag_stdtime'] = (dim, resolution.astype(int))
     data['flag_stdtime'].attrs.update({'units': '1', 'standard_name': 'flag_standard_time_conflict_resolution',
-                                       'info': '0: prefered, -1: lesser candidate, 1: duplicate, less data'})
+                                       'info': '0: preferred, -1: lesser candidate, 1: duplicate, less data'})
     ff.message('Updated [', nn, "] No Standard [", nx, "] [", newdates.size, "]", **kwargs)
 
     if not all(data[dim].values == np.sort(data[dim].values)):

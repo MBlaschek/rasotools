@@ -6,4 +6,5 @@ from . import qc
 from . import std
 from . import time
 from . import us_standard
+from . import winds
 from .__wrapper__ import *

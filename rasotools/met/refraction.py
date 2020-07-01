@@ -4,6 +4,8 @@ __all__ = ['refraction']
 
 
 def refraction(temp, pres, vp):
+    import xarray as xr
+
     # T, p, vp ?
     # dry refractivity or wet ? from radiosonde
     c1 = 0

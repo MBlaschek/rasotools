@@ -305,3 +305,30 @@ class Radiosonde(object):
 
                 else:
                     message("Error unknown data type (xarray) ", iname, type(self.data[iname]), **kwargs)
+
+    def map(self, **kwargs):
+        from ..plot.map import station
+        lon = None
+        lat = None
+        for iatt in self.attrs:
+            if 'station_lon' in iatt:
+                lon = self.attrs[iatt]
+                if isinstance(lon, str):
+                    for i in lon.split(' '):
+                        try:
+                            lon = float(i)
+                        except:
+                            pass
+
+            if 'station_lat' in iatt:
+                lat = self.attrs[iatt]
+                if isinstance(lat, str):
+                    for i in lat.split(' '):
+                        try:
+                            lat = float(i)
+                        except:
+                            pass
+        print(lon, lat)
+        if lon is None or lat is None:
+            raise ValueError("No location information found ??? (station_lon, station_lat")
+        return station(lon, lat, **kwargs)

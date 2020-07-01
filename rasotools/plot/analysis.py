@@ -36,7 +36,7 @@ def breakpoints_histograms(data, name, adjname, breakname, dim='time', levdim='p
         raise ValueError("Variable breakname not present", breakname, data.data_vars)
 
     variables = [name, adjname, breakname]
-    nplotlevels = 2  # timeseries, hists
+    nplotlevels = (1,1)  # timeseries, hists
     if other_var is not None:
         if not isinstance(other_var, list):
             other_var = [other_var]
@@ -44,9 +44,9 @@ def breakpoints_histograms(data, name, adjname, breakname, dim='time', levdim='p
             if iovar not in data.data_vars:
                 raise ValueError("Variable not present", iovar, data.data_vars)
             variables += [iovar]
-        nplotlevels = 3  # timeseries, timeseries, hists
+        nplotlevels = (2,1)  # timeseries, timeseries, hists
         if other_hist:
-            nplotlevels = 4
+            nplotlevels = (2,2)
 
     if bins is None:
         bins = np.arange(0, 60)
@@ -74,13 +74,14 @@ def breakpoints_histograms(data, name, adjname, breakname, dim='time', levdim='p
     xyhists = xyhists.assign_coords({'bins': bins[:-1]})  # np.mean([bins[:-1], bins[1:]], axis=0)})
     nbreaks = len(ibreaks)
     f = plt.figure(figsize=kwargs.pop('figsize', (12, nplotlevels * 3)))
-    gs = gridspec.GridSpec(nplotlevels, nbreaks, height_ratios=kwargs.pop('height_ratios', [1]*nplotlevels),
-                           hspace=0.4)  # zwischen oben und unten
+    gs_top = gridspec.GridSpec(nplotlevels[0], 1, hspace=0, bottom=kwargs.pop('bottom', 0.53))  # zwischen oben und unten
+    gs_bottom = gridspec.GridSpec(nplotlevels[0], nbreaks, hspace=0.1, wspace=0.2, top=kwargs.pop('top', 0.47))  # zwischen oben und unten
+    ###########################################################################
     #
     # timeseries
     #
-    j = 0
-    ax = f.add_subplot(gs[0, :])
+    ###########################################################################
+    ax = f.add_subplot(gs_top[0])
     ax = plotvar(data[name].rolling(**{dim: 30}, min_periods=10, center=True).mean(), dim=dim, ax=ax, **kwargs)
     ax = plotvar(data[adjname].rolling(**{dim: 30}, min_periods=10, center=True).mean(), dim=dim, ax=ax, **kwargs)
     ax = plotbreaks(data[breakname], dim=dim, ax=ax, ls=':', **update_kw('lw', 2, **kwargs))
@@ -89,50 +90,54 @@ def breakpoints_histograms(data, name, adjname, breakname, dim='time', levdim='p
     ax.set_ylabel("[%s]" % (xyhists[name].units))
     anno_labels = 'abcdefghijklmnopqrstuvwxyz'
     if annotate:
-        ax.annotate(anno_labels[j]+')',xy=(-0.06, 1), xycoords='axes fraction')
-    j = 1
+        ax.annotate(anno_labels[0]+')',xy=(-0.06, 1), xycoords='axes fraction')
     ax = [ax]
+    ###########################################################################
     if other_var is not None:
-        az = f.add_subplot(gs[j, :], sharex=ax[0])
+        az = f.add_subplot(gs_top[1], sharex=ax[0])
         for iovar in other_var:
             az = plotvar(data[iovar].rolling(**{dim: 30}, min_periods=10, center=True).mean(), dim=dim, ax=az, **kwargs)
         az = plotbreaks(data[breakname], dim=dim, ax=az, ls=':', **update_kw('lw', 2, **kwargs))
         az.set_title(" / ".join(other_var))
         az.set_xlabel('')
+        ax[0].set_xticklabels([])  # remove ticklabels
         az.set_ylabel("[%s]" % data[other_var[0]].units)
         if annotate:
-            az.annotate(anno_labels[j] + ')', xy=(-0.06, 1), xycoords='axes fraction')
+            az.annotate(anno_labels[1] + ')', xy=(-0.06, 1), xycoords='axes fraction')
         ax += [az]
-        j = 2
+    ###########################################################################
     #
     # Histograms
     #
+    ###########################################################################
     ibreaks = list(data[dim].values[ibreaks].astype('M8[D]').astype('str'))
     for i, ibreak in enumerate(ibreaks):
         # Plot
-        ay = f.add_subplot(gs[j, i], sharey=ax[j] if i > 0 else None)
+        ay = f.add_subplot(gs_bottom[0, i], sharey=ax[2] if i > 0 else None)
         # +++++ A | B ++++++
         # B adjusted
-        # ay.step('bins', 'values')
-        xyhists[adjname].sel(region='B%s' % ibreak).plot.step(ax=ay, label='B ' + adjname, c='lightgray')
+        xyhists[adjname].sel(region='B%s' % ibreak).plot.line(ax=ay, drawstyle='steps', label='B ' + adjname, c='lightgray')
         # A unadjusted
-        xyhists[name].sel(region='A%s' % ibreak).plot.step(ax=ay, label=name)
+        xyhists[name].sel(region='A%s' % ibreak).plot.line(ax=ay, label=name, drawstyle='steps')
         # A adjusted
-        xyhists[adjname].sel(region='A%s' % ibreak).plot.step(ax=ay, label=adjname)
+        xyhists[adjname].sel(region='A%s' % ibreak).plot.line(ax=ay, label=adjname, drawstyle='steps')
         # Other var
+        ###########################################################################
         if other_var is not None:
             if other_hist:
-                az = f.add_subplot(gs[j + 1, i], sharey=ax[j + 1] if i > 0 else None)
+                az = f.add_subplot(gs_bottom[1, i], sharey=ax[2] if i > 0 else None)
                 for iovar in other_var:
-                    xyhists[iovar].sel(region='A%s' % ibreak).plot.step(ax=az, label=iovar)
+                    xyhists[iovar].sel(region='A%s' % ibreak).plot.line(ax=az, label=iovar, drawstyle='steps')
             else:
                 for iovar in other_var:
-                    xyhists[iovar].sel(region='A%s' % ibreak).plot.step(ax=ay, label=iovar)
+                    xyhists[iovar].sel(region='A%s' % ibreak).plot.line(ax=ay, label=iovar, drawstyle='steps')
 
         ay.set_title("%s #%d" % (ibreak, xyhists[name].sel(region='A%s' % ibreak).sum()))
         if other_hist:
             ay.set_xlabel('')
-            az.set_title("%s #%d" % (ibreak, xyhists[name].sel(region='A%s' % ibreak).sum()))
+            ay.set_xticklabels([])
+            az.set_title('')
+            # az.set_title("%s #%d" % (ibreak, xyhists[name].sel(region='A%s' % ibreak).sum()))
             az.set_xlabel("%s [%s]" % (xyhists[name].standard_name, xyhists[name].units))
             if i == 0:
                 az.set_ylabel('#')
@@ -141,7 +146,7 @@ def breakpoints_histograms(data, name, adjname, breakname, dim='time', levdim='p
                 az.set_ylabel('')
             az.grid()
             if annotate:
-                az.annotate(anno_labels[(j+len(ibreaks))+i] + ')', xy=(-0.1, 1), xycoords='axes fraction')
+                az.annotate(anno_labels[(1+len(ibreaks))+i] + ')', xy=(-0.1, 1), xycoords='axes fraction')
             ax += [az]
         else:
             ay.set_xlabel("%s [%s]" % (xyhists[name].standard_name, xyhists[name].units))
@@ -153,7 +158,7 @@ def breakpoints_histograms(data, name, adjname, breakname, dim='time', levdim='p
             ay.set_ylabel('')
         ay.grid()
         if annotate:
-            ay.annotate(anno_labels[j+i] + ')', xy=(-0.1, 1), xycoords='axes fraction')
+            ay.annotate(anno_labels[1+i] + ')', xy=(-0.1, 1), xycoords='axes fraction')
         ax += [ay]
     return f, ax
 
@@ -228,3 +233,21 @@ def departures(var1, var2, data=None, dim='time', lev=None, colorlevels=None, lo
 
         return contour(ax, diff[dim].values, diff[lev].values, diff.values, logy=logy, colorlevels=colorlevels,
                        yticklabels=yticklabels, legend=legend, **kwargs)
+
+
+def snht_threshold(data, var=None, dep=None, colorlevels=None, dim='time', **kwargs):
+    # runs snht for some data and plots it in one step
+    from xarray import Dataset, DataArray
+    from ..bp import snht, get_breakpoints, apply_threshold
+    from ._helpers import line, contour, get_info, set_labels, plot_levels as pl, plot_arange as pa
+
+    if colorlevels is not None:
+        if isinstance(colorlevels, str):
+            colorlevels = eval(colorlevels)  # plot_levels, plot_arange
+
+    # 2. SNHT
+    data = snht(data, var=var, dep=dep, dim=dim, **kwargs)
+    # 3. threshold
+    data = apply_threshold(data, dim=dim, var=var, **kwargs)
+    # 4. plot
+    # todo add plotting

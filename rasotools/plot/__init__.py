@@ -2,6 +2,7 @@
 from ._helpers import plot_arange, plot_levels, discrete_colormap
 from . import map
 from . import profile
+from . import polar
 from .time import *
 from .analysis import *
 

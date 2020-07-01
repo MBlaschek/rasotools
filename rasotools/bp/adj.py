@@ -63,7 +63,12 @@ def mean(data, breaks, axis=0, sample_size=130, borders=30, max_sample=1460, rec
         before = np.nanmean(data[isample], axis=axis)
         # Apply Adjustments
         # print(i, isample, iref)
-        # adjust data ?
+
+        # add seasonal sampling check ?
+        # if the two samples have different seasonal sampling -> an adjustment bias might occur ?
+        # if the seasonal cycle is badly represented this poses a problem
+
+        # adjust data
         if meanvar:
             data[isample] = dep.meanvar(data[iref], data[isample], axis=axis, sample_size=sample_size,
                                         max_sample=max_sample,

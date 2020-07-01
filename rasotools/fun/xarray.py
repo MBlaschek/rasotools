@@ -187,6 +187,7 @@ def table_to_dataset(data, dim='time', plev='plev', levels=None, return_rejected
     #
     data = data.reset_index().set_index(varis)
     if not data.index.is_unique:
+        if kwargs.get('verbose', 0) > 0: print("Non-unique index, removing duplicates...")
         data = data.loc[~data.index.duplicated()]  # remove duplicated
 
     data = data.to_xarray()  # 1D -> 2D
@@ -200,12 +201,30 @@ def table_to_dataset(data, dim='time', plev='plev', levels=None, return_rejected
     return data
 
 
-def dataset_to_table():
-    # reverse function, with merging old not selected old data
-    pass
+def dataset_to_table(data, variables=None, dim='time'):
+    if variables is None:
+        variables = list(data.data_vars)
+    
+    attrs = {i: data[i].attrs.copy() for i in variables}
+    
+    dims = list(data.dims)
+    dims.remove(dim)
+    dims = [dim] + dims
+    print(dims, variables)
+    data = data[variables] \
+        .to_dataframe() \
+        .reset_index() \
+        .dropna(subset=dims) \
+        .sort_values(dims) \
+        .reset_index(drop=True) \
+        .to_xarray()
+    # put metadata back
+    for i in variables:
+        data[i].attrs.update(attrs[i])
+    return data
 
 
-def combine_datasets(a, b, subset=None, suffix=None, only2a=True, profiles=True, plev='plev', **kwargs):
+def combine_datasets(a, b, subset=None, suffix=None, only2a=True, profiles=True, plev='plev', add_flags=True, **kwargs):
     """ Combine two datasets
 
     Args:
@@ -220,6 +239,9 @@ def combine_datasets(a, b, subset=None, suffix=None, only2a=True, profiles=True,
     Returns:
         Dataset, Dataset : filled dataset, flags
         DataArray, DataArray : filled dataset, flags
+        
+    Note:
+        similar to combine_nested(), however combined vars and can be profiles only
     """
     import numpy as np
     from xarray import Dataset, DataArray, broadcast, align
@@ -269,9 +291,10 @@ def combine_datasets(a, b, subset=None, suffix=None, only2a=True, profiles=True,
         # lots of variables to process (Datasets)
         res = {}
         for ivar, jvar in zip(avars, bvars):
-            i, j = combine_datasets(ivar, jvar, suffix=suffix, **kwargs)
+            i, j = combine_datasets(ivar, jvar, suffix=suffix, only2a=only2a, profiles=profiles, **kwargs)
             res[i.name] = i
-            res[j.name] = j
+            if add_flags:
+                res[j.name] = j
         return Dataset(res)
     # Only one Variable to merge (DataArray)
     # Check dimensions
@@ -295,23 +318,26 @@ def combine_datasets(a, b, subset=None, suffix=None, only2a=True, profiles=True,
     # Combine data
     #
     a = a.copy()
-    flags = a.copy()
     if profiles:
         # check if one profile has more data than the other one
-        # so update
-        a.count(plev)
-        b.count(plev)
-        pass
+        # todo update meaings
+        # 0,1,2 [nan, A, B]
+        flags = (a.count(plev) > b.count(plev))
+        a = a.where(flags, b)
+        flags = flags.astype(int)
     else:
+        flags = a.copy()
         logic = np.isfinite(a.values)  # full array
         # only select whole profiles, not individual values
         a.values = np.where(logic, a.values, b.values)
         # where filled in
         flags.values = (~logic) & np.isfinite(b.values)
-
+        flags = flags.astype(int)
+        
     if suffix is None:
         suffix = ''
     flags.name = flags.name + suffix + '_flag'
+    flags.attrs.update({'meaning': 'from_B from_A', 'range': [0,1]})
     a.name = a.name + suffix
     return a, flags
 

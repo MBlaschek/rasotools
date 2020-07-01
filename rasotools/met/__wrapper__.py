@@ -17,14 +17,14 @@ def standard_datetime_hours(data, dim='time', times=(0, 6, 12, 18), span=3, freq
 
 def access_odb_table(data, dim='time', pvar=None, sel=None):
     from numpy import unique
-    from xarray import concat
+    import xarray  as xr
 
     data = data.sel(**{dim: sel}).set_coords(pvar)
     print(unique(data[dim].values))
     tmp = dict(data.groupby(dim))
     for ikey in tmp.keys():
         tmp[ikey] = tmp[ikey].swap_dims({dim: pvar}).assign_coords({dim: ikey})
-    data = concat(tmp.values(), dim=dim)
+    data = xr.concat(tmp.values(), dim=dim)
     return data
 
 
@@ -40,11 +40,11 @@ def saturation_water_vapor(temp, press=None, method='HylandWexler', precision=9,
         svp: satuartion water vapor pressure [Pa]
     """
     from numpy import around
-    from xarray import DataArray
+    import xarray as xr
     from .convert import _conform
     from .esat import svp
 
-    if not isinstance(temp, DataArray):
+    if not isinstance(temp, xr.DataArray):
         raise ValueError("Requires a DataArray", type(temp))
 
     evar = temp.copy()
@@ -53,7 +53,7 @@ def saturation_water_vapor(temp, press=None, method='HylandWexler', precision=9,
             if press in evar.dims:
                 press = evar[press].values
                 press = _conform(press, evar.values.shape)
-        elif isinstance(press, DataArray):
+        elif isinstance(press, xr.DataArray):
             press = press.values
         else:
             pass
@@ -96,11 +96,11 @@ def total_precipitable_water(data, dim='plev', levels=None, min_levels=8, fill_n
             W = np.sum( q * dp ) / 9.81   requires dp calculation dpres (NCL)
         The integral is with rho_water (assumed 1000) and neglected for conversion of m to mm
     """
-    from xarray import DataArray
+    import xarray as xr
     from ..fun.xarray import xarray_function_wrapper
     from .tpw import tpw
 
-    if not isinstance(data, DataArray):
+    if not isinstance(data, xr.DataArray):
         raise ValueError("Requires a DataArray", type(data))
 
     if dim not in data.dims:
@@ -151,12 +151,12 @@ def vertical_interpolation(data, dim='plev', levels=None, **kwargs):
     Returns:
         DataArray : interpolated Array
     """
-    from xarray import DataArray
+    import xarray as xr
     import numpy as np
     from ..fun.interp import profile
     from .. import config
 
-    if not isinstance(data, DataArray):
+    if not isinstance(data, xr.DataArray):
         raise ValueError("Requires a DataArray", type(data))
 
     if dim not in data.dims:

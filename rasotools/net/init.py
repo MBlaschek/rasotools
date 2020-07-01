@@ -21,7 +21,7 @@ def stationlist(name, stations, ident='wmo', lon='lon', lat='lat', region=None, 
         lon (str): column, key in stationlist
         lat (str): column, key in stationlist
         region (tuple): (lon1, lon2, lat1, lat2)
-        eval (str): pandas eval on stations
+        query (str): pandas eval on stations
 
     Returns:
         Network : Radiosonde network class
@@ -39,7 +39,7 @@ def stationlist(name, stations, ident='wmo', lon='lon', lat='lat', region=None, 
     if not isinstance(stations, pd.DataFrame):
         stations = pd.DataFrame(stations)
 
-    if eval is not None:
+    if query is not None:
         message("Stations: ", len(stations), **kwargs)
         stations = stations.query(query)
         message("Query: ", len(stations), **kwargs)

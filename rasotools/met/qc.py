@@ -411,8 +411,8 @@ def wind_speed(data, report=True, **kwargs):
         raise ValueError("Requires a DataArray, ", type(data))
 
     if 'units' in data.attrs:
-        if data.attrs['units'] != 'ms^-1':
-            raise RuntimeWarning("wind speed does not have units m/s (ms^-1)")
+        if data.attrs['units'] not in ['m s-1', 'm/s']:
+            raise RuntimeWarning("wind speed does not have units m/s (ms^-1)", data.attrs['units'])
 
     ws_absmin = 0
     ws_absmax = 150
@@ -455,8 +455,8 @@ def wind_direction(data, report=True, **kwargs):
         raise ValueError("Requires a DataArray, ", type(data))
 
     if 'units' in data.attrs:
-        if data.attrs['units'] != 'degrees':
-            raise RuntimeWarning("wind speed does not have units degrees (degrees)")
+        if data.attrs['units'] != 'degree':
+            raise RuntimeWarning("wind speed does not have units degree (degree)", data.attrs['units'])
 
     ws_absmin = 0
     ws_absmax = 360
@@ -630,54 +630,3 @@ def flagcount(data):
 
     return txt
 
-
-#
-# def report_object(flags, data, min=None, max=None, absmin=None, absmax=None):
-#     from numpy import where
-#     from xarray import Dataset
-#     events = Dataset()
-#     indices = where(flags > 1)
-#     if indices[0].size > 0:
-#         for i, idim in enumerate(flags.dims):
-#             events[idim] = ('event', flags[idim].values[indices[i]])
-#         events = events.set_coords(flags.dims)
-#         events[data.name] = ('event', data.values[indices])  # this might be an xarray object
-#         if min is not None:
-#             events['min'] = ('event', min[indices])
-#         if max is not None:
-#             events['max'] = ('event', max[indices])
-#         if absmin is not None:
-#             events['absmin'] = ('event', [absmin] * events.event.size)
-#         if absmax is not None:
-#             events['absmax'] = ('event', [absmax] * events.event.size)
-#
-#     return events
-#
-#
-# def report_object_to_string(da):
-#     from numpy import datetime64
-#     coords = list(da.coords)
-#     cformat = "[QC] | sel("
-#     for i, idim in enumerate(coords):
-#         if isinstance(da[idim].values[0], datetime64):
-#             cformat += "%s='{%s}'" % (idim, idim)
-#         else:
-#             cformat += "%s={%s}" % (idim, idim)
-#         if i < (len(coords) - 1):
-#             cformat += ','
-#     cformat += ") | "
-#     varis = list(da.data_vars)
-#     for i in varis:
-#         if 'min' in i:
-#             imin = i
-#         elif 'max' in i:
-#             imax = i
-#         else:
-#             ivar = i
-#     if 'abs' in imin:
-#         cformat += "{%s} < {%s:.2e} < {%s}" % (imin, ivar, imax)
-#     else:
-#         cformat += "{%s:.2e} < {%s:.2e} < {%s:.2e}" % (imin, ivar, imax)
-# isonde.data.exp001_dpd_era5_qc_reports.to_dataframe().apply(lambda x: "QC sel(hour={hour}, time='{time}', plev={plev}) | {absmin} < {dpd:.2e} < {absmax}".format(**dict(x)), axis=1)
-#     events = da.to_dataframe().apply(lambda x: cformat.format(**dict(x)), axis=1)
-#     return events.to_list()

@@ -197,6 +197,8 @@ def execute_process(iterable, npp=10, return_value=False, loop=False, progress=T
         else:
             p.terminate()
 
+    # todo what if not all have been executed ? / Execute others?
+    # p.execute() if not self.executed ?
     results = []
     ok = []
     errors = []

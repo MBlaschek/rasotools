@@ -174,13 +174,21 @@ def contour(ax, dates, plevs, test, logy=False, colorlevels=None, yticklabels=No
     if ax is None:
         f, ax = plt.subplots(figsize=kwargs.get('figsize', None))  # 1D SNHT PLOT
 
-    cs = ax.contourf(dates, plevs, test.T, levels=colorlevels,
-                     cmap=kwargs.pop('cmap', 'RdYlBu_r'),
-                     extend=kwargs.pop('extend', 'neither'),
-                     vmin=kwargs.pop('vmin', None),
-                     vmax=kwargs.pop('vmax', None),
-                     norm=kwargs.pop('norm', None)
-                     )  # hatches=kwargs.pop('hatches', [])
+    if kwargs.get('use_pcolormesh', False):
+        from matplotlib.colors import BoundaryNorm
+        cmap = plt.get_cmap(kwargs.pop('cmap', 'RdYlBu_r'))
+        norm = BoundaryNorm(colorlevels, ncolors=cmap.N, clip=True)
+        cs = ax.pcolormesh(dates, plevs, test.T, cmap=cmap, norm=kwargs.pop('norm', norm),
+                           vmin=kwargs.pop('vmin', None),
+                         vmax=kwargs.pop('vmax', None))
+    else:
+        cs = ax.contourf(dates, plevs, test.T, levels=colorlevels,
+                         cmap=kwargs.pop('cmap', 'RdYlBu_r'),
+                         extend=kwargs.get('extend', 'neither'),
+                         vmin=kwargs.pop('vmin', None),
+                         vmax=kwargs.pop('vmax', None),
+                         norm=kwargs.pop('norm', None)
+                         )  # hatches=kwargs.pop('hatches', [])
 
     if logy:
         ax.set_yscale('log')
@@ -210,7 +218,11 @@ def contour(ax, dates, plevs, test, logy=False, colorlevels=None, yticklabels=No
         cbar = plt.colorbar(cs, ax=ax, orientation=kwargs.get('orientation', "vertical"),
                             fraction=kwargs.get('fraction', 0.01),
                             aspect=kwargs.get('aspect', 50),
-                            shrink=kwargs.get('shrink', 0.8))
+                            extend=kwargs.get('extend', 'neither'),
+                            shrink=kwargs.get('shrink', 0.8),
+                            ticks=kwargs.get('legend_ticks', None))
+        if kwargs.get('legend_ticklabels', None) is not None:
+            cbar.set_ticklabels(kwargs.get('legend_ticklabels', None))
         cbar.set_label(clabel)
     else:
         return ax, cs

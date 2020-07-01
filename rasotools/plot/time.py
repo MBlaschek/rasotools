@@ -88,10 +88,11 @@ def summary(data, dim='time', thres=None, ax=None, **kwargs):
         if thres is not None:
             ay = ax.twinx()
             ay = line(data[dim].values, (data >= thres).sum(idims).values, ax=ay, color=kwargs.get('color', 'r'))
-            ay.set_yticks(np.linspace(ay.get_yticks()[-1], ay.get_yticks()[0], len(ax.get_yticks())))
+            ay.set_yticks(np.linspace(0, 16, len(ax.get_yticks())))
             ay.spines['right'].set_color(kwargs.get('color', 'r'))
             ay.yaxis.label.set_color(kwargs.get('color', 'r'))
             ay.tick_params(axis='y', colors=kwargs.get('color', 'r'))
+            ay.set_ylim(0, 16)
             return ax, ay
     else:
         set_labels(kwargs, xlabel=get_info(data[dim]),
@@ -232,20 +233,18 @@ def snht(data, snht_var, break_var, dim='time', lev='plev', thres=50, **kwargs):
     ax[1].set_title('')
     if break_var is not None:
         breakpoints(data[break_var], ax=ax[1], color='k', dim=dim, lw=2)
-    summary(data[snht_var], dim=dim, thres=thres, ax=ax[0], xlabel='', ylabel='Sum SNHT', **kwargs)
+    ax[0] = summary(data[snht_var], dim=dim, thres=thres, ax=ax[0], xlabel='', ylabel='Sum SNHT', **kwargs)
     if break_var is not None:
-        breakpoints(data[break_var], ax=ax[0], color='k', dim=dim, lw=2)
+        if isinstance(ax[0], tuple):
+            breakpoints(data[break_var], ax=ax[0][0], color='k', dim=dim, lw=2)
+        else:
+            breakpoints(data[break_var], ax=ax[0], color='k', dim=dim, lw=2)
     f.get_axes()[2].set_ylabel('Sum sign. Levs')
     f.subplots_adjust(right=0.9)
     cax = f.add_axes([0.91, 0.15, 0.015, 0.5])
     f.colorbar(cs, cax=cax)
     f.subplots_adjust(hspace=0.05)
-    # if upper is not None:
-    #     for i in upper:
-    #         eval('ax[0]' + i)
-    # if lower is not None:
-    #     for i in lower:
-    #         eval('ax[1]' + i)
+    ax = f.get_axes()  # Make sure all axes are there
     return f, ax
 
 

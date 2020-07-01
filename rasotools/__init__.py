@@ -120,3 +120,27 @@ def open_radiosonde(name, ident=None, filename=None, directory=None, **kwargs):
     out = Radiosonde(ident)
     out.add(name, filename=filename, directory=directory, **kwargs)
     return out
+
+
+def open_network(directory, **kwargs):
+    """ Load pickle dump of a network
+    
+    Args:
+        directory (str): directory or filename to pickle
+    
+    Returns:
+        Network : Radiosonde network object
+    """
+    import pickle
+    import os
+    if os.path.isdir(directory):
+        for ifile in sorted(os.listdir(directory)):
+            if os.path.isfile(directory + '/' + ifile) and 'network_' in ifile:
+                print("Restoring:", directory + '/' + ifile)
+                return pickle.load(open(directory + '/' + ifile, 'rb'))
+            
+    elif os.path.isfile(directory):
+        print("Restoring:", directory)
+        return pickle.load(open(directory, 'rb'))
+    else:
+        pass

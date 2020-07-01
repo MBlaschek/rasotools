@@ -10,32 +10,6 @@ jra55_grid = None
 cera_grid = None
 
 
-def station_class(sonde, **kwargs):
-    from ..cls import Radiosonde
-    if not isinstance(sonde, Radiosonde):
-        raise ValueError('Requires a Radiosonde class object')
-    for iatt in sonde.attrs:
-        if 'lon' in iatt:
-            lon = sonde.attrs[iatt]
-            if isinstance(lon, str):
-                for i in lon.split(' '):
-                    try:
-                        lon = float(i)
-                    except:
-                        pass
-
-        if 'lat' in iatt:
-            lat = sonde.attrs[iatt]
-            if isinstance(lat, str):
-                for i in lat.split(' '):
-                    try:
-                        lat = float(i)
-                    except:
-                        pass
-    print(lon, lat)
-    return station(lon, lat, **kwargs)
-
-
 def station(lon, lat, label=None, marker='o', markersize=20, bounds=1, ax=None, data=None, **kwargs):
     import numpy as np
     import cartopy as cpy
@@ -125,12 +99,43 @@ def station(lon, lat, label=None, marker='o', markersize=20, bounds=1, ax=None, 
 
 def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=True, coastlines=True, rivers=False,
            grid=True, posneg=False, extent=None, lloffset=0.2, showcost=False, clabel=None, cbars={}, colorlevels=None,
-           data=None, vmin=None, vmax=None, dropna=False, **kwargs):
+           data=None, vmin=None, vmax=None, dropna=False, figure=None, gridspecs=None, **kwargs):
+    """ Plot stations on a map
+
+    Args:
+        lon (np.array, list): Longitudes
+        lat (np.array, list): Latidutes
+        labels (np.array, list): Labels
+        values (np.array, list): Values for scatterplot
+        markersize (int): markersize
+        ocean (bool): plot ocean ?
+        land (bool): plot land ?
+        coastlines (bool): plot coastlines ?
+        rivers (bool): plot river ?
+        grid (bool): plot gridlines ?
+        posneg (bool): different markers for positive and negative
+        extent (str): neither (default), both, min, max
+        lloffset (float): label offset
+        showcost (bool): Estimate Cost function and add to title
+        clabel (str): Colorbar Label
+        cbars (dict): Colorbar Options
+        colorlevels (list, str): scatterplot colorlevels
+        data (xr.DataArray): Data
+        vmin (float): minimum value
+        vmax (float): maximum value
+        dropna (bool): Remove missing values?
+        figure (plt.figure): figure handle
+        gridspecs (dict): gridspec options for figure
+        **kwargs:
+
+    Returns:
+        plt.axes
+    """
     import numpy as np
     import cartopy as cpy
     from matplotlib.colors import BoundaryNorm
     import matplotlib.pyplot as plt
-    from ._helpers import cost
+    from ._helpers import cost, plot_arange as pa, plot_levels as pl
 
     if data is not None:
         lon = data[lon]
@@ -167,7 +172,10 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
             print("NA", nn - idx.sum(), nn)
 
     projection = kwargs.get('projection', cpy.crs.PlateCarree())
-    ax = plt.axes(projection=projection)
+    if figure is None:
+        ax = plt.axes(projection=projection)
+    else:
+        ax = figure.add_subplot(gridspecs, projection=projection)
 
     if ocean:
         ax.add_feature(cpy.feature.OCEAN, zorder=0, facecolor=kwargs.get('ocean_facecolor', cpy.feature.COLORS['water']))
@@ -209,11 +217,11 @@ def points(lon, lat, labels=None, values=None, markersize=80, ocean=True, land=T
                         marker=kwargs.get('marker', 'o'),
                         norm=norm)
 
-        cb = plt.colorbar(cs, ax=ax,
-                          fraction=cbars.get('fraction', 0.01),
-                          aspect=cbars.get('aspect', 50),
-                          shrink=cbars.get('shrink', 0.8),
-                          extend=cbars.get('extend', 'both'))
+        cbars['fraction'] = cbars.get('fraction', 0.01)
+        cbars['aspect'] = cbars.get('aspect', 50)
+        cbars['shrink'] = cbars.get('shrink', 0.8)
+        cbars['extend'] = cbars.get('extend', 'both')
+        cb = plt.colorbar(cs, ax=ax, **cbars)
 
         if clabel is not None:
             cb.set_label(clabel)

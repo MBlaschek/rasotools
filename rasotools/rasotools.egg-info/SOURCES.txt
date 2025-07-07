@@ -1,0 +1,6 @@
+pyproject.toml
+setup.py
+rasotools.egg-info/PKG-INFO
+rasotools.egg-info/SOURCES.txt
+rasotools.egg-info/dependency_links.txt
+rasotools.egg-info/top_level.txt

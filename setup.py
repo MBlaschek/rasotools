@@ -1,47 +1,34 @@
-import re
+from setuptools import setup, find_packages
 
-import setuptools
-
-with open("README.md", "r") as fh:
-    long_description = fh.read()
-
-with open('requirements.txt', 'r') as f:
-    required = [re.sub(r'==.*', '', i) for i in f.read().splitlines()]
-
-# date based versioning [YEAR].[MONTH]
-setuptools.setup(
+setup(
     name='rasotools',
-    version='19.12',
-    description='RASO tools',
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url='https://github.com/MBlaschek/rasotools',
-    author='MB',
-    author_email='michael.blaschek@univie.ac.at',
-    license='MIT',
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Science/Research",
-        "Intended Audience :: Education",
-        "Topic :: Scientific/Engineering :: Atmospheric Science",
-    ],
-    packages=setuptools.find_packages(),
+    version='0.2.0',
+    author='Ulrich Voggenberger',
+    author_email='ulrich.voggenberger@univie.ac.at',
+    description='Tools for radiosonde data processing and analysis',
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
+    url='http://pypi.python.org/pypi/Rasotools/',  # optional
+    packages=find_packages(include=['rasotools', 'rasotools.*']),
     include_package_data=True,
-    install_requires=required,
-    scripts=['bin/rsncnfo'],
     entry_points={
         'console_scripts': [
-            'rscf = rasotools.fun.cfconvention:main'
-        ]
+            'rsjupyter=rasotools.some_module:main_function',
+            'rsncnfo=rasotools.other_module:main_function',
+        ],
     },
-    python_requires='>=3'
+    install_requires=[
+        # list your Python dependencies here or use requirements.txt
+        'numpy',
+        'numexpr >= 2.4',
+        'xarray',
+        'matplotlib',
+        'netCDF4',
+    ],
+    classifiers=[
+        'Programming Language :: Python :: 3',
+        'License :: OSI Approved :: MIT License',  # adjust as needed
+        'Operating System :: OS Independent',
+    ],
+    python_requires='>=3.7',
 )
-
-# Build and upload
-# python3 setup.py bdist_wheel
-# twine upload dist/* -r pypitest --verbose
-# make requirements.txt
-# pipreqs rasotools  -> rasotools/requirements.txt

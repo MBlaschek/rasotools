@@ -1,2 +1,4 @@
-graft rasotools/ax
-global-exclude *.py[cod]
+include README.md LICENSE requirements.txt
+recursive-include rasotools *.py *.so
+recursive-include rasotools/ax *
+recursive-include rasotools/bp *

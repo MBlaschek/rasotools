@@ -248,7 +248,10 @@ def cost(lon, lat, values):
     for i in range(n):
         # Distance of all points * difference of values
         #
-        cost[i] = np.nansum((distance(lon[i], lat[i], lat, lon) * (values[i] - values)) ** 2)
+        # cost[i] = np.nansum((distance(lon[i], lat[i], lat, lon) * (values[i] - values)) ** 2)
+        # Changed, so the more distant points affect the heterogeneity cost less - about 5000km per 40000km for only 10% of the weight - converted to radians
+        cost[i] = np.nansum((np.exp(-1*distance(lon[i], lat[i], lat, lon)/5000*40000/(2*np.pi)) * (values[i] - values)) ** 2)
+
 
     return cost  # np.nansum(cost)/np.sum(np.isfinite(values))
 
